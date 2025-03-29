@@ -1,0 +1,22 @@
+# יש להפעיל את מנוע ה-rewrite
+RewriteEngine On
+
+# כל בקשה לתיקיית booking תועבר לקובץ index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^([a-zA-Z0-9\-]+)/?$ index.php?slug=$1 [L,QSA]
+
+# קובץ ה-index.php כברירת מחדל
+DirectoryIndex index.php
+
+# מנע פעולות של נוספות של מנהל קבצים
+Options -Indexes
+
+# מנע רשימת תיקיות
+IndexIgnore *
+
+# הגנה על קבצים חשובים
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
