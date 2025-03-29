@@ -1,0 +1,126 @@
+/**
+ * Booking System - Custom CSS
+ * 
+ * מאוכסן ב: booking/assets/css/booking.css
+ * עיצובים מותאמים אישית למערכת הזמנת התורים
+ */
+
+ body {
+    font-family: 'Noto Sans Hebrew', sans-serif;
+    scroll-behavior: smooth;
+}
+
+.hero-section {
+    min-height: 450px;
+    background-color: rgba(0, 0, 0, 0.3);
+    background-blend-mode: overlay;
+    background-size: cover;
+    background-position: center;
+}
+
+.service-card:hover {
+    border-color: #ec4899;
+    transform: translateY(-2px);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #ec4899;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #db2777;
+}
+
+/* Styling for booking steps */
+.booking-step {
+    display: none;
+}
+
+.booking-step.active {
+    display: block;
+}
+
+.step-indicator {
+    transition: all 0.3s ease;
+}
+
+.time-slot {
+    transition: all 0.15s ease;
+}
+
+.time-slot:hover {
+    background-color: #f9d4ea;
+    color: #db2777;
+}
+
+.time-slot.selected {
+    background-color: #ec4899;
+    color: white;
+}
+
+.staff-card {
+    transition: all 0.2s ease;
+}
+
+.staff-card:hover {
+    transform: translateY(-2px);
+}
+
+.staff-card.selected {
+    border-color: #ec4899;
+    background-color: #fdf2f8;
+}
+
+/* Calendar styling */
+.fc-day-today {
+    background-color: #fdf2f8 !important;
+}
+
+.fc-day:not(.fc-day-disabled) {
+    cursor: pointer;
+}
+
+.fc-day:not(.fc-day-disabled):hover {
+    background-color: #fce7f3 !important;
+}
+
+.fc-day.selected-date {
+    background-color: #fbcfe8 !important;
+}
+
+/* Loading spinner */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Waitlist modal animation */
+#waitlistModal {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+#waitlistModal.show {
+    opacity: 1;
+}

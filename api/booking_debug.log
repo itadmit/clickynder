@@ -1,0 +1,9 @@
+[2025-03-29 16:03:18] Raw input data: "{\"tenant_id\":\"2\",\"service_id\":13,\"staff_id\":4,\"appointment_date\":\"2025-03-30\",\"appointment_time\":\"12:00\",\"first_name\":\"יוגב\",\"last_name\":\"אביטן\",\"phone\":\"0542284283\",\"email\":\"itadmit@gmail.com\",\"notes\":\"\",\"intake_answers\":{}}"
+[2025-03-29 16:03:18] Processed input data: {"tenant_id":"2","service_id":13,"staff_id":4,"appointment_date":"2025-03-30","appointment_time":"12:00","first_name":"יוגב","last_name":"אביטן","phone":"0542284283","email":"itadmit@gmail.com","notes":"","intake_answers":[]}
+[2025-03-29 16:03:18] Database connection established
+[2025-03-29 16:03:18] Sanitized data: {"tenant_id":2,"service_id":13,"staff_id":4,"appointment_date":"2025-03-30","appointment_time":"12:00","email":"itadmit@gmail.com","notes":""}
+[2025-03-29 16:03:18] Service details retrieved: {"duration":30,"buffer_time_before":0,"buffer_time_after":0}
+[2025-03-29 16:03:18] Appointment times calculated: {"real_start":"2025-03-30 12:00:00","start_datetime":"2025-03-30 12:00:00","end_datetime":"2025-03-30 12:30:00"}
+[2025-03-29 16:03:18] Checking for conflicts with params: {"staff_id":"4","start_time":"2025-03-30 12:00:00","end_time":"2025-03-30 12:30:00"}
+[2025-03-29 16:03:18] Error checking conflicts: "SQLSTATE[HY093]: Invalid parameter number"
+[2025-03-29 16:03:18] Database error: {"success":false,"message":"שגיאת מסד נתונים: SQLSTATE[HY093]: Invalid parameter number"}

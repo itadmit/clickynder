@@ -7,7 +7,7 @@ require_once "includes/functions.php";
 $slug = isset($_GET['slug']) ? sanitizeInput($_GET['slug']) : '';
 
 if (empty($slug)) {
-    // אם אין סלאג, הפניה לדף שגיאה או דף ראשי
+    // אם אין סלאג, הפנייה לדף שגיאה או דף ראשי
     header("Location: index.php");
     exit;
 }
@@ -95,6 +95,16 @@ try {
         }
         $services_by_category[$category_id][] = $service;
     }
+    
+    // שליפת שאלות מקדימות
+    $query = "SELECT * FROM intake_questions 
+             WHERE tenant_id = :tenant_id 
+             AND (service_id IS NULL OR service_id = 0)
+             ORDER BY display_order ASC";
+    $stmt = $db->prepare($query);
+    $stmt->bindParam(":tenant_id", $tenant_id);
+    $stmt->execute();
+    $general_questions = $stmt->fetchAll();
     
 } catch (PDOException $e) {
     // טיפול בשגיאות מסד נתונים
@@ -236,12 +246,57 @@ $current_day = date('w');
             background-color: #ec4899;
             color: white;
         }
+        
+        .staff-card {
+            transition: all 0.2s ease;
+        }
+        
+        .staff-card:hover {
+            transform: translateY(-2px);
+        }
+        
+        .staff-card.selected {
+            border-color: #ec4899;
+            background-color: #fdf2f8;
+        }
+        
+        /* Calendar styling */
+        .fc-day-today {
+            background-color: #fdf2f8 !important;
+        }
+        
+        .fc-day:not(.fc-day-disabled) {
+            cursor: pointer;
+        }
+        
+        .fc-day:not(.fc-day-disabled):hover {
+            background-color: #fce7f3 !important;
+        }
+        
+        .fc-day.selected-date {
+            background-color: #fbcfe8 !important;
+        }
+        
+        /* Loading spinner */
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-gray-50">
     <!-- Hero Section -->
     <div class="hero-section flex flex-col justify-center items-center text-white text-center px-4 relative" 
-         style="    background-color: #000000d6;background-image: url('<?php echo !empty($tenant['cover_image_path']) ? htmlspecialchars($tenant['cover_image_path']) : 'assets/img/default-cover.jpg'; ?>');">
+         style="background-color: #000000d6; background-image: url('<?php echo !empty($tenant['cover_image_path']) ? htmlspecialchars($tenant['cover_image_path']) : 'assets/img/default-cover.jpg'; ?>');">
         
         <?php if (!empty($tenant['logo_path'])): ?>
             <div class="mb-6">
@@ -529,6 +584,30 @@ $current_day = date('w');
                     
                     <!-- Step 2: Date & Time Selection -->
                     <div id="step2" class="booking-step">
+                        <!-- אם יש מספר אנשי צוות, נציג בחירת איש צוות -->
+                        <?php if (count($staff) > 1): ?>
+                        <div class="mb-6">
+                            <label class="block text-gray-700 font-medium mb-2">בחר נותן שירות:</label>
+                            <div class="grid grid-cols-2 md:grid-cols-3 gap-3" id="staffSelector">
+                                <?php foreach ($staff as $member): ?>
+                                    <div class="grid grid-cols-2 md:grid-cols-3 gap-3" id="staffSelector">
+                                <?php foreach ($staff as $member): ?>
+                                <div class="staff-card bg-white border-2 border-gray-300 rounded-xl p-3 text-center cursor-pointer hover:border-primary" 
+                                     data-staff-id="<?php echo $member['staff_id']; ?>">
+                                    <?php if (!empty($member['image_path'])): ?>
+                                        <img src="<?php echo htmlspecialchars($member['image_path']); ?>" class="w-16 h-16 object-cover rounded-full mx-auto mb-2">
+                                    <?php else: ?>
+                                        <div class="w-16 h-16 rounded-full bg-primary text-white flex items-center justify-center mx-auto mb-2 text-xl font-bold">
+                                            <?php echo mb_substr($member['name'], 0, 1, 'UTF-8'); ?>
+                                        </div>
+                                    <?php endif; ?>
+                                    <p class="font-medium"><?php echo htmlspecialchars($member['name']); ?></p>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                        
                         <div id="calendarContainer" class="mb-6">
                             <!-- כאן יוצג לוח השנה -->
                         </div>
@@ -591,6 +670,74 @@ $current_day = date('w');
                                          class="w-full px-4 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-primary"
                                          placeholder="הערות מיוחדות או בקשות"></textarea>
                             </div>
+                            
+                            <!-- שאלות מקדימות - אם הוגדרו -->
+                            <?php if (!empty($general_questions)): ?>
+                            <div class="mt-6 border-t pt-6">
+                                <h4 class="font-semibold mb-4">שאלות מקדימות:</h4>
+                                
+                                <div class="space-y-4">
+                                    <?php foreach ($general_questions as $question): ?>
+                                    <div class="question-item">
+                                        <label class="block text-gray-700 mb-1">
+                                            <?php echo htmlspecialchars($question['question_text']); ?>
+                                            <?php if ($question['is_required']): ?>
+                                            <span class="text-red-500">*</span>
+                                            <?php endif; ?>
+                                        </label>
+                                        
+                                        <?php if ($question['question_type'] == 'text'): ?>
+                                            <input type="text" class="intake-answer w-full px-4 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-primary"
+                                                   data-question-id="<?php echo $question['question_id']; ?>"
+                                                   <?php echo $question['is_required'] ? 'required' : ''; ?>>
+                                                   
+                                        <?php elseif ($question['question_type'] == 'textarea'): ?>
+                                            <textarea class="intake-answer w-full px-4 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-primary" rows="3"
+                                                      data-question-id="<?php echo $question['question_id']; ?>"
+                                                      <?php echo $question['is_required'] ? 'required' : ''; ?>></textarea>
+                                                      
+                                        <?php elseif ($question['question_type'] == 'select'): ?>
+                                            <?php $options = json_decode($question['options'], true); ?>
+                                            <select class="intake-answer w-full px-4 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-primary"
+                                                    data-question-id="<?php echo $question['question_id']; ?>"
+                                                    <?php echo $question['is_required'] ? 'required' : ''; ?>>
+                                                <option value="">בחר...</option>
+                                                <?php foreach ($options as $option): ?>
+                                                    <option value="<?php echo htmlspecialchars($option); ?>"><?php echo htmlspecialchars($option); ?></option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                            
+                                        <?php elseif ($question['question_type'] == 'radio'): ?>
+                                            <?php $options = json_decode($question['options'], true); ?>
+                                            <div class="flex flex-wrap gap-4">
+                                                <?php foreach ($options as $index => $option): ?>
+                                                    <label class="inline-flex items-center">
+                                                        <input type="radio" class="intake-answer" name="radio_<?php echo $question['question_id']; ?>"
+                                                               value="<?php echo htmlspecialchars($option); ?>"
+                                                               data-question-id="<?php echo $question['question_id']; ?>"
+                                                               <?php echo $question['is_required'] && $index == 0 ? 'required' : ''; ?>>
+                                                        <span class="mr-2"><?php echo htmlspecialchars($option); ?></span>
+                                                    </label>
+                                                <?php endforeach; ?>
+                                            </div>
+                                            
+                                        <?php elseif ($question['question_type'] == 'checkbox'): ?>
+                                            <?php $options = json_decode($question['options'], true); ?>
+                                            <div class="flex flex-wrap gap-4">
+                                                <?php foreach ($options as $option): ?>
+                                                    <label class="inline-flex items-center">
+                                                        <input type="checkbox" class="intake-answer" value="<?php echo htmlspecialchars($option); ?>"
+                                                               data-question-id="<?php echo $question['question_id']; ?>">
+                                                        <span class="mr-2"><?php echo htmlspecialchars($option); ?></span>
+                                                    </label>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                            <?php endif; ?>
                         </div>
                         
                         <div class="flex justify-between mt-6">
@@ -625,6 +772,11 @@ $current_day = date('w');
                                 </div>
                                 
                                 <div class="flex justify-between pb-2 border-b border-gray-200">
+                                    <span class="font-medium">נותן שירות:</span>
+                                    <span id="summary_staff"></span>
+                                </div>
+                                
+                                <div class="flex justify-between pb-2 border-b border-gray-200">
                                     <span class="font-medium">שם מלא:</span>
                                     <span id="summary_name"></span>
                                 </div>
@@ -632,6 +784,11 @@ $current_day = date('w');
                                 <div class="flex justify-between pb-2 border-b border-gray-200">
                                     <span class="font-medium">טלפון:</span>
                                     <span id="summary_phone"></span>
+                                </div>
+                                
+                                <div id="summary_email_container" class="flex justify-between pb-2 border-b border-gray-200 hidden">
+                                    <span class="font-medium">אימייל:</span>
+                                    <span id="summary_email"></span>
                                 </div>
                                 
                                 <div id="summary_notes_container" class="pb-2 border-b border-gray-200 hidden">
@@ -688,11 +845,14 @@ $current_day = date('w');
                                     
                                     <div class="text-right font-medium">שעה:</div>
                                     <div class="text-left" id="booking_time"></div>
+                                    
+                                    <div class="text-right font-medium">נותן שירות:</div>
+                                    <div class="text-left" id="booking_staff"></div>
                                 </div>
                             </div>
                             
                             <div class="flex flex-col md:flex-row justify-center gap-4">
-                                <a href="#" class="bg-primary hover:bg-primary-dark text-white font-bold py-2 px-6 rounded-xl transition duration-300">
+                                <a href="#" id="addToCalendarBtn" class="bg-primary hover:bg-primary-dark text-white font-bold py-2 px-6 rounded-xl transition duration-300">
                                     הוסף תור ליומן
                                 </a>
                                 <a href="<?php echo htmlspecialchars($_SERVER['REQUEST_URI']); ?>" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 px-6 rounded-xl transition duration-300">
@@ -750,6 +910,8 @@ $current_day = date('w');
         let selectedServiceName = '';
         let selectedDate = '';
         let selectedTimeSlot = '';
+        let selectedStaffId = <?php echo isset($staff[0]) ? $staff[0]['staff_id'] : 0; ?>; // ברירת מחדל - איש צוות ראשון
+        let selectedStaffName = '<?php echo isset($staff[0]) ? htmlspecialchars(addslashes($staff[0]['name'])) : ''; ?>'; // ברירת מחדל - איש צוות ראשון
         let availableTimeSlots = [];
         let calendar = null;
         
@@ -760,9 +922,6 @@ $current_day = date('w');
                     scrollTop: $('#booking').offset().top - 50
                 }, 1000);
             });
-            
-            // Initialize calendar
-            initializeCalendar();
             
             // Navigation between steps
             setupStepNavigation();
@@ -811,11 +970,40 @@ $current_day = date('w');
                     handleDateSelection(info.dateStr);
                 },
                 eventSources: [
-                    // Here we would fetch business closed days, but for now we'll keep it empty
-                ]
+                    // יש לטעון חריגי ימים (חגים, ימי סגירה) מה-API
+                    {
+                        url: 'api/get_business_exceptions.php',
+                        method: 'GET',
+                        extraParams: {
+                            tenant_id: <?php echo $tenant_id; ?>
+                        },
+                        failure: function() {
+                            console.error('שגיאה בטעינת ימי סגירה');
+                        }
+                    }
+                ],
+                
+                // Restrict selectable dates - disable past dates
+                validRange: {
+                    start: new Date()
+                },
+                
+                // Change display for closed days
+                dayCellClassNames: function(arg) {
+                    const dayOfWeek = arg.date.getDay();
+                    
+                    <?php foreach ($hours_by_day as $day => $hours): ?>
+                        <?php if (!$hours['is_open']): ?>
+                            if (dayOfWeek === <?php echo $day; ?>) {
+                                return ['fc-day-disabled'];
+                            }
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                    
+                    return [];
+                }
             });
         }
-        
         // Handle date selection in calendar
         function handleDateSelection(dateStr) {
             const today = new Date();
@@ -830,6 +1018,18 @@ $current_day = date('w');
                 return;
             }
             
+            // Check if the selected day is a business day
+            const dayOfWeek = selectedDay.getDay();
+            
+            <?php foreach ($hours_by_day as $day => $hours): ?>
+                <?php if (!$hours['is_open']): ?>
+                    if (dayOfWeek === <?php echo $day; ?>) {
+                        alert('העסק סגור ביום זה. אנא בחר יום אחר.');
+                        return;
+                    }
+                <?php endif; ?>
+            <?php endforeach; ?>
+            
             selectedDate = dateStr;
             $('#selectedDate').text(formatDateHebrew(selectedDate));
             
@@ -838,7 +1038,7 @@ $current_day = date('w');
             $('.fc-day[data-date="' + dateStr + '"]').addClass('selected-date');
             
             // Fetch available time slots for this date and service
-            fetchAvailableTimeSlots(selectedServiceId, dateStr);
+            fetchAvailableTimeSlots(selectedServiceId, dateStr, selectedStaffId);
         }
         
         // Format date in Hebrew
@@ -848,125 +1048,64 @@ $current_day = date('w');
             const month = date.getMonth() + 1;
             const year = date.getFullYear();
             
-            return `${day}/${month}/${year}`;
+            // Get day name
+            const dayNames = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+            const dayName = dayNames[date.getDay()];
+            
+            return `יום ${dayName}, ${day}/${month}/${year}`;
         }
         
-        // Fetch available time slots (in a real implementation, this would make an AJAX call to the server)
-        // עדכון הפונקציה fetchAvailableTimeSlots בדף booking.php
-function fetchAvailableTimeSlots(serviceId, dateStr) {
-    $('#timeSlots').removeClass('hidden');
-    const container = $('#timeSlotsContainer');
-    container.empty();
-    
-    // הצגת אנימציית טעינה
-    container.html('<div class="col-span-full text-center py-4"><i class="fas fa-spinner fa-spin mr-2"></i> טוען זמנים פנויים...</div>');
-    
-    // קבלת מזהה ה-tenant מה-URL או משתנה גלובלי
-    const tenantId = <?php echo $tenant_id; ?>;
-    
-    // קריאה ל-API לקבלת סלוטים פנויים
-    $.get('api/available_slots.php', {
-        date: dateStr,
-        service_id: serviceId,
-        staff_id: 0, // אם אין בחירת נותן שירות ספציפי
-        tenant_id: tenantId
-    }, function(response) {
-        container.empty();
-        
-        if (response.success && response.slots.length > 0) {
-            // הצגת הסלוטים הפנויים
-            availableTimeSlots = response.slots;
+        // Fetch available time slots from API
+        function fetchAvailableTimeSlots(serviceId, dateStr, staffId) {
+            $('#timeSlots').removeClass('hidden');
+            const container = $('#timeSlotsContainer');
+            container.empty();
             
-            response.slots.forEach(slot => {
-                container.append(`
-                    <div class="time-slot bg-white border-2 border-gray-300 rounded-lg py-2 text-center cursor-pointer hover:border-primary"
-                         onclick="selectTimeSlot('${slot}')">${slot}</div>
-                `);
-            });
+            // הצגת אנימציית טעינה
+            container.html('<div class="col-span-full text-center py-4"><i class="fas fa-spinner fa-spin mr-2"></i> טוען זמנים פנויים...</div>');
             
-            $('#noTimeSlotsMessage').addClass('hidden');
-        } else {
-            // אין סלוטים פנויים
-            $('#noTimeSlotsMessage').removeClass('hidden');
-            if (response.message) {
-                $('#noTimeSlotsMessage p').text(response.message);
-            }
-        }
-    }).fail(function() {
-        container.html('<div class="col-span-full text-center py-4 text-red-500"><i class="fas fa-exclamation-circle mr-2"></i> אירעה שגיאה בטעינת הזמנים הפנויים</div>');
-    });
-}
-        
-        // Generate time slots between open and close times
-        function generateTimeSlots(openTime, closeTime, intervalMinutes) {
-            const slots = [];
-            const interval = intervalMinutes * 60 * 1000; // convert to milliseconds
-            
-            const start = new Date(`2000-01-01T${openTime}`);
-            const end = new Date(`2000-01-01T${closeTime}`);
-            
-            let current = new Date(start);
-            
-            while (current < end) {
-                // Format the time as HH:MM
-                const hours = current.getHours().toString().padStart(2, '0');
-                const minutes = current.getMinutes().toString().padStart(2, '0');
-                const timeStr = `${hours}:${minutes}`;
+            // קריאה ל-API לקבלת סלוטים פנויים
+            $.get('api/available_slots.php', {
+                date: dateStr,
+                service_id: serviceId,
+                staff_id: staffId,
+                tenant_id: <?php echo $tenant_id; ?>
+            }, function(response) {
+                container.empty();
                 
-                slots.push(timeStr);
-                
-                // Move to next slot
-                current = new Date(current.getTime() + interval);
-            }
-            
-            return slots;
-        }
-        
-        // Remove time slots that fall within break times
-        function removeBreakTimeSlots(slots, breaks) {
-            return slots.filter(slot => {
-                const slotTime = new Date(`2000-01-01T${slot}:00`);
-                
-                // Check if slot is within any break time
-                for (const breakItem of breaks) {
-                    const breakStart = new Date(`2000-01-01T${breakItem.start_time}`);
-                    const breakEnd = new Date(`2000-01-01T${breakItem.end_time}`);
+                if (response.success && response.slots.length > 0) {
+                    // הצגת הסלוטים הפנויים
+                    availableTimeSlots = response.slots;
                     
-                    if (slotTime >= breakStart && slotTime < breakEnd) {
-                        return false; // Remove this slot
+                    response.slots.forEach(slot => {
+                        container.append(`
+                            <div class="time-slot bg-white border-2 border-gray-300 rounded-lg py-2 text-center cursor-pointer hover:border-primary"
+                                 onclick="selectTimeSlot('${slot}')">${slot}</div>
+                        `);
+                    });
+                    
+                    $('#noTimeSlotsMessage').addClass('hidden');
+                    // עדכון כפתור המשך להיות לא פעיל עד לבחירת שעה
+                    $('#nextToStep3').addClass('bg-gray-300 text-gray-500 cursor-not-allowed')
+                                     .removeClass('bg-primary hover:bg-primary-dark text-white');
+                } else {
+                    // אין סלוטים פנויים
+                    $('#noTimeSlotsMessage').removeClass('hidden');
+                    if (response.message) {
+                        $('#noTimeSlotsMessage p').text(response.message);
                     }
+                    
+                    // כפתור המשך לא פעיל
+                    $('#nextToStep3').addClass('bg-gray-300 text-gray-500 cursor-not-allowed')
+                                     .removeClass('bg-primary hover:bg-primary-dark text-white');
                 }
+            }).fail(function() {
+                container.html('<div class="col-span-full text-center py-4 text-red-500"><i class="fas fa-exclamation-circle mr-2"></i> אירעה שגיאה בטעינת הזמנים הפנויים</div>');
                 
-                return true; // Keep this slot
+                // כפתור המשך לא פעיל
+                $('#nextToStep3').addClass('bg-gray-300 text-gray-500 cursor-not-allowed')
+                                 .removeClass('bg-primary hover:bg-primary-dark text-white');
             });
-        }
-        
-        // Remove time slots that are in the past if the selected date is today
-        function removePastTimeSlots(slots) {
-            const now = new Date();
-            const currentHour = now.getHours();
-            const currentMinute = now.getMinutes();
-            
-            return slots.filter(slot => {
-                const [hour, minute] = slot.split(':').map(Number);
-                
-                // Compare with current time
-                if (hour > currentHour || (hour === currentHour && minute > currentMinute)) {
-                    return true; // Keep slots in the future
-                }
-                
-                return false; // Remove slots in the past
-            });
-        }
-        
-        // Check if date is today
-        function isToday(dateStr) {
-            const today = new Date();
-            const check = new Date(dateStr);
-            
-            return today.getDate() === check.getDate() &&
-                   today.getMonth() === check.getMonth() &&
-                   today.getFullYear() === check.getFullYear();
         }
         
         // Handle time slot selection
@@ -1005,6 +1144,26 @@ function fetchAvailableTimeSlots(serviceId, dateStr) {
                 
                 // Update progress indicators
                 updateProgressIndicators(2);
+                
+// הגדרת אירוע בחירת איש צוות
+$('.staff-card').click(function() {
+                    $('.staff-card').removeClass('border-primary selected').addClass('border-gray-300');
+                    $(this).removeClass('border-gray-300').addClass('border-primary selected');
+                    selectedStaffId = $(this).data('staff-id');
+                    selectedStaffName = $(this).find('p').text();
+                    
+                    // עדכון התאריכים והזמנים בהתאם לאיש הצוות שנבחר
+                    if (selectedDate) {
+                        fetchAvailableTimeSlots(selectedServiceId, selectedDate, selectedStaffId);
+                    }
+                });
+                
+                // בחירת איש צוות ראשון כברירת מחדל
+                if ($('.staff-card').length > 0) {
+                    $('.staff-card:first').addClass('border-primary selected').removeClass('border-gray-300');
+                    selectedStaffId = $('.staff-card:first').data('staff-id');
+                    selectedStaffName = $('.staff-card:first').find('p').text();
+                }
             });
             
             // Back to Step 1
@@ -1045,12 +1204,47 @@ function fetchAvailableTimeSlots(serviceId, dateStr) {
                     return;
                 }
                 
+                // בדיקת תקינות מספר טלפון
+                if (!isValidPhoneNumber(phone)) {
+                    alert('אנא הזן מספר טלפון תקין');
+                    return;
+                }
+                
+                // בדיקת תקינות אימייל אם הוזן
+                const email = $('#email').val();
+                if (email && !isValidEmail(email)) {
+                    alert('אנא הזן כתובת אימייל תקינה');
+                    return;
+                }
+                
+                // בדיקת שאלות חובה
+                let missingRequired = false;
+                $('.intake-answer[required]').each(function() {
+                    if (!$(this).val()) {
+                        missingRequired = true;
+                        return false; // break the loop
+                    }
+                });
+                
+                if (missingRequired) {
+                    alert('אנא ענה על כל שאלות החובה');
+                    return;
+                }
+                
                 // Update summary
                 $('#summary_service').text(selectedServiceName);
                 $('#summary_date').text(formatDateHebrew(selectedDate));
                 $('#summary_time').text(selectedTimeSlot);
+                $('#summary_staff').text(selectedStaffName);
                 $('#summary_name').text(firstName + ' ' + lastName);
                 $('#summary_phone').text(phone);
+                
+                if (email) {
+                    $('#summary_email').text(email);
+                    $('#summary_email_container').removeClass('hidden');
+                } else {
+                    $('#summary_email_container').addClass('hidden');
+                }
                 
                 const notes = $('#notes').val();
                 if (notes) {
@@ -1074,26 +1268,107 @@ function fetchAvailableTimeSlots(serviceId, dateStr) {
             
             // Confirm Booking (Submit)
             $('#confirmBooking').click(function() {
-                // In a real implementation, this would submit the form data to the server
-                // For the demo, we'll just show the success message
+                // הצגת אנימציית טעינה
+                const button = $(this);
+                button.html('<div class="loading-spinner mr-2"></div> מעבד...');
+                button.prop('disabled', true);
                 
-                // Generate a random booking reference
-                const bookingRef = generateBookingReference();
+                // איסוף תשובות לשאלות מקדימות
+                const intakeAnswers = {};
+                $('.intake-answer').each(function() {
+                    const questionId = $(this).data('question-id');
+                    if (questionId) {
+                        if ($(this).attr('type') === 'checkbox') {
+                            if ($(this).is(':checked')) {
+                                if (!intakeAnswers[questionId]) {
+                                    intakeAnswers[questionId] = [];
+                                }
+                                intakeAnswers[questionId].push($(this).val());
+                            }
+                        } else if ($(this).attr('type') === 'radio') {
+                            if ($(this).is(':checked')) {
+                                intakeAnswers[questionId] = $(this).val();
+                            }
+                        } else {
+                            intakeAnswers[questionId] = $(this).val();
+                        }
+                    }
+                });
                 
-                // Update booking details in success screen
-                $('#booking_reference').text(bookingRef);
-                $('#booking_service').text(selectedServiceName);
-                $('#booking_date').text(formatDateHebrew(selectedDate));
-                $('#booking_time').text(selectedTimeSlot);
+                // בניית אובייקט הנתונים לשליחה
+                const bookingData = {
+                    tenant_id: <?php echo $tenant_id; ?>,
+                    service_id: selectedServiceId,
+                    staff_id: selectedStaffId, 
+                    appointment_date: selectedDate,
+                    appointment_time: selectedTimeSlot,
+                    first_name: $('#first_name').val(),
+                    last_name: $('#last_name').val(),
+                    phone: $('#phone').val(),
+                    email: $('#email').val(),
+                    notes: $('#notes').val(),
+                    intake_answers: intakeAnswers
+                };
                 
-                // Show success message
-                $('.booking-step').removeClass('active');
-                $('#step5').addClass('active');
-                
-                // Hide progress indicators
-                $('.step-indicator').parent().addClass('hidden');
-                $('#progress-bar').parent().addClass('hidden');
+                // שליחה ל-API
+                $.ajax({
+                    url: 'api/booking.php',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(bookingData),
+                    success: function(response) {
+                        if (response.success) {
+                            // עדכון פרטי התור במסך ההצלחה
+                            $('#booking_reference').text(response.reference || '');
+                            $('#booking_service').text(selectedServiceName);
+                            $('#booking_date').text(formatDateHebrew(selectedDate));
+                            $('#booking_time').text(selectedTimeSlot);
+                            $('#booking_staff').text(selectedStaffName);
+                            
+                            // יצירת קישור להוספה ליומן
+                            const calendarEvent = generateCalendarLink(
+                                selectedServiceName, 
+                                response.start_datetime || `${selectedDate}T${selectedTimeSlot}:00`,
+                                response.end_datetime || `${selectedDate}T${selectedTimeSlot}:00`,
+                                '<?php echo htmlspecialchars($tenant['business_name']); ?>',
+                                '<?php echo htmlspecialchars($tenant['address'] ?? ''); ?>'
+                            );
+                            $('#addToCalendarBtn').attr('href', calendarEvent);
+                            
+                            // הצגת מסך הצלחה
+                            $('.booking-step').removeClass('active');
+                            $('#step5').addClass('active');
+                            
+                            // הסתרת סמן התקדמות
+                            $('.step-indicator').parent().addClass('hidden');
+                            $('#progress-bar').parent().addClass('hidden');
+                        } else {
+                            // טיפול בשגיאה
+                            alert('אירעה שגיאה: ' + (response.message || 'אנא נסה שנית'));
+                            button.html('אישור הזמנה');
+                            button.prop('disabled', false);
+                        }
+                    },
+                    error: function() {
+                        alert('אירעה שגיאה בעת שליחת הבקשה');
+                        button.html('אישור הזמנה');
+                        button.prop('disabled', false);
+                    }
+                });
             });
+        }
+        
+        // בדיקת תקינות מספר טלפון
+        function isValidPhoneNumber(phone) {
+            // ניקוי מקפים ורווחים
+            const cleanPhone = phone.replace(/[\s-]/g, '');
+            // בדיקת תבנית מספר טלפון ישראלי
+            return /^(0[23489]\d{7}|05\d{8})$/.test(cleanPhone);
+        }
+        
+        // בדיקת תקינות אימייל
+        function isValidEmail(email) {
+            return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
         }
         
         // Update progress indicators
@@ -1109,15 +1384,35 @@ function fetchAvailableTimeSlots(serviceId, dateStr) {
             }
         }
         
-        // Generate a random booking reference
-        function generateBookingReference() {
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-            let result = '';
-            for (let i = 0; i < 8; i++) {
-                result += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            return result;
+        // יצירת קישור להוספה ליומן גוגל
+        function generateCalendarLink(title, start, end, location, address) {
+            // המרת תאריכים לפורמט RFC5545
+            const formatDateTime = (dateTimeStr) => {
+                const dt = new Date(dateTimeStr);
+                return dt.toISOString().replace(/-|:|\.\d+/g, '');
+            };
+            
+            const startFormatted = formatDateTime(start);
+            const endFormatted = formatDateTime(end);
+            
+            // יצירת התיאור
+            const description = "תור שנקבע ב" + location;
+            
+            // בניית הקישור
+            const googleCalendarUrl = 'https://www.google.com/calendar/render?action=TEMPLATE' +
+                '&text=' + encodeURIComponent(title) +
+                '&dates=' + startFormatted + '/' + endFormatted +
+                '&details=' + encodeURIComponent(description) +
+                '&location=' + encodeURIComponent(address) +
+                '&sprop=&sprop=name:';
+                
+            return googleCalendarUrl;
         }
     </script>
 </body>
 </html>
+
+<?php
+// סגירת החיבור למסד הנתונים
+$db = null;
+?>
