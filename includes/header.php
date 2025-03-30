@@ -98,6 +98,7 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
             background: #db2777;
         }
     </style>
+    
 </head>
 <body class="bg-gray-50 text-gray-800">
     <div class="flex h-screen overflow-hidden">

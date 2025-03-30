@@ -1,9 +1,56 @@
-[2025-03-29 16:03:18] Raw input data: "{\"tenant_id\":\"2\",\"service_id\":13,\"staff_id\":4,\"appointment_date\":\"2025-03-30\",\"appointment_time\":\"12:00\",\"first_name\":\"יוגב\",\"last_name\":\"אביטן\",\"phone\":\"0542284283\",\"email\":\"itadmit@gmail.com\",\"notes\":\"\",\"intake_answers\":{}}"
-[2025-03-29 16:03:18] Processed input data: {"tenant_id":"2","service_id":13,"staff_id":4,"appointment_date":"2025-03-30","appointment_time":"12:00","first_name":"יוגב","last_name":"אביטן","phone":"0542284283","email":"itadmit@gmail.com","notes":"","intake_answers":[]}
-[2025-03-29 16:03:18] Database connection established
-[2025-03-29 16:03:18] Sanitized data: {"tenant_id":2,"service_id":13,"staff_id":4,"appointment_date":"2025-03-30","appointment_time":"12:00","email":"itadmit@gmail.com","notes":""}
-[2025-03-29 16:03:18] Service details retrieved: {"duration":30,"buffer_time_before":0,"buffer_time_after":0}
-[2025-03-29 16:03:18] Appointment times calculated: {"real_start":"2025-03-30 12:00:00","start_datetime":"2025-03-30 12:00:00","end_datetime":"2025-03-30 12:30:00"}
-[2025-03-29 16:03:18] Checking for conflicts with params: {"staff_id":"4","start_time":"2025-03-30 12:00:00","end_time":"2025-03-30 12:30:00"}
-[2025-03-29 16:03:18] Error checking conflicts: "SQLSTATE[HY093]: Invalid parameter number"
-[2025-03-29 16:03:18] Database error: {"success":false,"message":"שגיאת מסד נתונים: SQLSTATE[HY093]: Invalid parameter number"}
+[2025-03-29 16:20:37] Raw input data: "{\"tenant_id\":\"2\",\"service_id\":13,\"staff_id\":4,\"appointment_date\":\"2025-03-31\",\"appointment_time\":\"14:30\",\"first_name\":\"יוגב\",\"last_name\":\"אביטן\",\"phone\":\"0542284283\",\"email\":\"itadmit@gmail.com\",\"notes\":\"\",\"intake_answers\":{}}"
+[2025-03-29 16:20:37] Processed input data: {"tenant_id":"2","service_id":13,"staff_id":4,"appointment_date":"2025-03-31","appointment_time":"14:30","first_name":"יוגב","last_name":"אביטן","phone":"0542284283","email":"itadmit@gmail.com","notes":"","intake_answers":[]}
+[2025-03-29 16:20:37] Database connection established
+[2025-03-29 16:20:37] Sanitized data: {"tenant_id":2,"service_id":13,"staff_id":4,"appointment_date":"2025-03-31","appointment_time":"14:30","email":"itadmit@gmail.com","notes":""}
+[2025-03-29 16:20:37] Service details retrieved: {"duration":30,"buffer_time_before":0,"buffer_time_after":0}
+[2025-03-29 16:20:37] Appointment times calculated: {"real_start":"2025-03-31 14:30:00","start_datetime":"2025-03-31 14:30:00","end_datetime":"2025-03-31 15:00:00"}
+[2025-03-29 16:20:37] Using simple query approach with placeholders: "SELECT appointment_id FROM appointments \n              WHERE staff_id = ? \n              AND status IN ('pending', 'confirmed') \n              AND (\n                  (start_datetime <= ? AND end_datetime > ?) OR\n                  (start_datetime < ? AND end_datetime >= ?) OR\n                  (start_datetime >= ? AND end_datetime <= ?)\n              )"
+[2025-03-29 16:20:37] Creating new customer
+[2025-03-29 16:20:37] New customer created: "4"
+[2025-03-29 16:20:37] Creating appointment with params: {"tenant_id":"2","customer_id":"4","staff_id":4,"service_id":"13","start_datetime":"2025-03-31 14:30:00","end_datetime":"2025-03-31 15:00:00","notes":""}
+[2025-03-29 16:20:37] Appointment created: "4"
+[2025-03-29 16:20:37] Generated reference: "GRI5VF7C"
+[2025-03-29 16:20:37] Warning: reference_id field does not exist in appointments table
+[2025-03-29 16:20:37] Success response: {"success":true,"message":"התור נקבע בהצלחה","appointment_id":"4","reference":"GRI5VF7C","start_datetime":"2025-03-31 14:30:00","end_datetime":"2025-03-31 15:00:00"}
+[2025-03-29 16:20:58] Raw input data: "{\"tenant_id\":\"2\",\"service_id\":13,\"staff_id\":4,\"appointment_date\":\"2025-03-31\",\"appointment_time\":\"15:00\",\"first_name\":\"יוגב\",\"last_name\":\"אביטן\",\"phone\":\"0542284283\",\"email\":\"itadmit@gmail.com\",\"notes\":\"\",\"intake_answers\":{}}"
+[2025-03-29 16:20:58] Processed input data: {"tenant_id":"2","service_id":13,"staff_id":4,"appointment_date":"2025-03-31","appointment_time":"15:00","first_name":"יוגב","last_name":"אביטן","phone":"0542284283","email":"itadmit@gmail.com","notes":"","intake_answers":[]}
+[2025-03-29 16:20:58] Database connection established
+[2025-03-29 16:20:58] Sanitized data: {"tenant_id":2,"service_id":13,"staff_id":4,"appointment_date":"2025-03-31","appointment_time":"15:00","email":"itadmit@gmail.com","notes":""}
+[2025-03-29 16:20:58] Service details retrieved: {"duration":30,"buffer_time_before":0,"buffer_time_after":0}
+[2025-03-29 16:20:58] Appointment times calculated: {"real_start":"2025-03-31 15:00:00","start_datetime":"2025-03-31 15:00:00","end_datetime":"2025-03-31 15:30:00"}
+[2025-03-29 16:20:58] Using simple query approach with placeholders: "SELECT appointment_id FROM appointments \n              WHERE staff_id = ? \n              AND status IN ('pending', 'confirmed') \n              AND (\n                  (start_datetime <= ? AND end_datetime > ?) OR\n                  (start_datetime < ? AND end_datetime >= ?) OR\n                  (start_datetime >= ? AND end_datetime <= ?)\n              )"
+[2025-03-29 16:20:58] Existing customer found: 4
+[2025-03-29 16:20:58] Updated existing customer
+[2025-03-29 16:20:58] Creating appointment with params: {"tenant_id":"2","customer_id":"4","staff_id":4,"service_id":"13","start_datetime":"2025-03-31 15:00:00","end_datetime":"2025-03-31 15:30:00","notes":""}
+[2025-03-29 16:20:58] Appointment created: "5"
+[2025-03-29 16:20:58] Generated reference: "Q10FATDL"
+[2025-03-29 16:20:58] Warning: reference_id field does not exist in appointments table
+[2025-03-29 16:20:58] Success response: {"success":true,"message":"התור נקבע בהצלחה","appointment_id":"5","reference":"Q10FATDL","start_datetime":"2025-03-31 15:00:00","end_datetime":"2025-03-31 15:30:00"}
+[2025-03-29 17:21:20] Raw input data: "{\"tenant_id\":\"2\",\"service_id\":13,\"staff_id\":4,\"appointment_date\":\"2025-03-30\",\"appointment_time\":\"12:00\",\"first_name\":\"יוגב\",\"last_name\":\"אביטן\",\"phone\":\"0542284283\",\"email\":\"itadmit@gmail.com\",\"notes\":\"\",\"intake_answers\":{}}"
+[2025-03-29 17:21:20] Processed input data: {"tenant_id":"2","service_id":13,"staff_id":4,"appointment_date":"2025-03-30","appointment_time":"12:00","first_name":"יוגב","last_name":"אביטן","phone":"0542284283","email":"itadmit@gmail.com","notes":"","intake_answers":[]}
+[2025-03-29 17:21:20] Database connection established
+[2025-03-29 17:21:20] Sanitized data: {"tenant_id":2,"service_id":13,"staff_id":4,"appointment_date":"2025-03-30","appointment_time":"12:00","email":"itadmit@gmail.com","notes":""}
+[2025-03-29 17:21:20] Service details retrieved: {"duration":30,"buffer_time_before":0,"buffer_time_after":0}
+[2025-03-29 17:21:20] Appointment times calculated: {"real_start":"2025-03-30 12:00:00","start_datetime":"2025-03-30 12:00:00","end_datetime":"2025-03-30 12:30:00"}
+[2025-03-29 17:21:20] Using simple query approach with placeholders: "SELECT appointment_id FROM appointments \n              WHERE staff_id = ? \n              AND status IN ('pending', 'confirmed') \n              AND (\n                  (start_datetime <= ? AND end_datetime > ?) OR\n                  (start_datetime < ? AND end_datetime >= ?) OR\n                  (start_datetime >= ? AND end_datetime <= ?)\n              )"
+[2025-03-29 17:21:20] Existing customer found: 4
+[2025-03-29 17:21:20] Updated existing customer
+[2025-03-29 17:21:20] Creating appointment with params: {"tenant_id":"2","customer_id":"4","staff_id":4,"service_id":"13","start_datetime":"2025-03-30 12:00:00","end_datetime":"2025-03-30 12:30:00","notes":""}
+[2025-03-29 17:21:20] Appointment created: "6"
+[2025-03-29 17:21:20] Generated reference: "PJ2CZKNO"
+[2025-03-29 17:21:20] Warning: reference_id field does not exist in appointments table
+[2025-03-29 17:21:20] Success response: {"success":true,"message":"התור נקבע בהצלחה","appointment_id":"6","reference":"PJ2CZKNO","start_datetime":"2025-03-30 12:00:00","end_datetime":"2025-03-30 12:30:00"}
+[2025-03-30 08:38:21] Raw input data: "{\"tenant_id\":\"2\",\"service_id\":13,\"staff_id\":4,\"appointment_date\":\"2025-03-31\",\"appointment_time\":\"12:00\",\"first_name\":\"יוגב\",\"last_name\":\"אביטן\",\"phone\":\"0542284283\",\"email\":\"itadmit@gmail.com\",\"notes\":\"\",\"intake_answers\":{}}"
+[2025-03-30 08:38:21] Processed input data: {"tenant_id":"2","service_id":13,"staff_id":4,"appointment_date":"2025-03-31","appointment_time":"12:00","first_name":"יוגב","last_name":"אביטן","phone":"0542284283","email":"itadmit@gmail.com","notes":"","intake_answers":[]}
+[2025-03-30 08:38:21] Database connection established
+[2025-03-30 08:38:21] Sanitized data: {"tenant_id":2,"service_id":13,"staff_id":4,"appointment_date":"2025-03-31","appointment_time":"12:00","email":"itadmit@gmail.com","notes":""}
+[2025-03-30 08:38:21] Service details retrieved: {"duration":30,"buffer_time_before":0,"buffer_time_after":0}
+[2025-03-30 08:38:21] Appointment times calculated: {"real_start":"2025-03-31 12:00:00","start_datetime":"2025-03-31 12:00:00","end_datetime":"2025-03-31 12:30:00"}
+[2025-03-30 08:38:21] Using simple query approach with placeholders: "SELECT appointment_id FROM appointments \n              WHERE staff_id = ? \n              AND status IN ('pending', 'confirmed') \n              AND (\n                  (start_datetime <= ? AND end_datetime > ?) OR\n                  (start_datetime < ? AND end_datetime >= ?) OR\n                  (start_datetime >= ? AND end_datetime <= ?)\n              )"
+[2025-03-30 08:38:21] Existing customer found: 4
+[2025-03-30 08:38:21] Updated existing customer
+[2025-03-30 08:38:21] Creating appointment with params: {"tenant_id":"2","customer_id":"4","staff_id":4,"service_id":"13","start_datetime":"2025-03-31 12:00:00","end_datetime":"2025-03-31 12:30:00","notes":""}
+[2025-03-30 08:38:21] Appointment created: "7"
+[2025-03-30 08:38:21] Generated reference: "VUWLMKK8"
+[2025-03-30 08:38:21] Warning: reference_id field does not exist in appointments table
+[2025-03-30 08:38:21] Success response: {"success":true,"message":"התור נקבע בהצלחה","appointment_id":"7","reference":"VUWLMKK8","start_datetime":"2025-03-31 12:00:00","end_datetime":"2025-03-31 12:30:00"}

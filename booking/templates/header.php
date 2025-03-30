@@ -83,11 +83,11 @@ if (!defined('ACCESS_ALLOWED') && basename($_SERVER['PHP_SELF']) == basename(__F
 <body class="bg-gray-50">
     <!-- Hero Section - תמונת רקע ופרטי עסק -->
     <div class="hero-section flex flex-col justify-center items-center text-white text-center px-4 relative" 
-         style="background-color: #000000d6; background-image: url('<?php echo !empty($tenant['cover_image_path']) ? htmlspecialchars($tenant['cover_image_path']) : '../assets/img/default-cover.jpg'; ?>');">
+         style="background-color: #000000d6; background-image: url('../<?php echo !empty($tenant['cover_image_path']) ? htmlspecialchars($tenant['cover_image_path']) : '../assets/img/default-cover.jpg'; ?>');">
         
         <?php if (!empty($tenant['logo_path'])): ?>
             <div class="mb-6">
-                <img src="<?php echo htmlspecialchars($tenant['logo_path']); ?>" alt="<?php echo htmlspecialchars($tenant['business_name']); ?>" class="w-24 h-24 rounded-full object-cover border-4 border-white">
+                <img src="../<?php echo htmlspecialchars($tenant['logo_path']); ?>" alt="<?php echo htmlspecialchars($tenant['business_name']); ?>" class="w-24 h-24 rounded-full object-cover border-4 border-white">
             </div>
         <?php endif; ?>
         

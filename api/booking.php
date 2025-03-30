@@ -211,41 +211,44 @@ try {
     ]);
     
     // בדיקה אם יש כבר תור באותו הזמן עם אותו נותן שירות
-    try {
-        // שימו לב! התיקון החשוב הוא כאן - שמות הפרמטרים צריכים להיות זהים בשאילתה ובעת הקישור
-        $query = "SELECT appointment_id FROM appointments 
-              WHERE staff_id = :staff_id 
+    // בדיקה אם יש כבר תור באותו הזמן עם אותו נותן שירות
+try {
+    // שינוי לגישה פשוטה יותר
+    $query = "SELECT appointment_id FROM appointments 
+              WHERE staff_id = ? 
               AND status IN ('pending', 'confirmed') 
               AND (
-                  (start_datetime <= :start_time AND end_datetime > :start_time) OR
-                  (start_datetime < :end_time AND end_datetime >= :end_time) OR
-                  (start_datetime >= :start_time AND end_datetime <= :end_time)
+                  (start_datetime <= ? AND end_datetime > ?) OR
+                  (start_datetime < ? AND end_datetime >= ?) OR
+                  (start_datetime >= ? AND end_datetime <= ?)
               )";
-        $stmt = $db->prepare($query);
-        $stmt->bindParam(":staff_id", $staff_id);
-        $stmt->bindParam(":start_time", $real_start); // שים לב לשינוי כאן מ-:start_datetime ל-:start_time
-        $stmt->bindParam(":end_time", $end_datetime); // שים לב לשינוי כאן מ-:end_datetime ל-:end_time
-        writeToLog("Checking for conflicts with params", [
-            'staff_id' => $staff_id,
-            'start_time' => $real_start,
-            'end_time' => $end_datetime
-        ]);
-        $stmt->execute();
-
-        if ($stmt->rowCount() > 0) {
-            $error = [
-                'success' => false,
-                'message' => 'המועד שנבחר כבר נתפס על ידי מישהו אחר. אנא בחר מועד אחר.'
-            ];
-            writeToLog("Time slot conflict found", $error);
-            echo json_encode($error);
-            exit;
-        }
-    } catch (PDOException $e) {
-        writeToLog("Error checking conflicts", $e->getMessage());
-        throw $e;
-    }
     
+    writeToLog("Using simple query approach with placeholders", $query);
+    
+    $stmt = $db->prepare($query);
+    $stmt->execute([
+        $staff_id,
+        $real_start, 
+        $real_start,
+        $end_datetime, 
+        $end_datetime,
+        $real_start, 
+        $end_datetime
+    ]);
+    
+    if ($stmt->rowCount() > 0) {
+        $error = [
+            'success' => false,
+            'message' => 'המועד שנבחר כבר נתפס על ידי מישהו אחר. אנא בחר מועד אחר.'
+        ];
+        writeToLog("Time slot conflict found", $error);
+        echo json_encode($error);
+        exit;
+    }
+} catch (PDOException $e) {
+    writeToLog("Error checking conflicts", $e->getMessage());
+    throw $e;
+}
     // בדיקה אם הלקוח כבר קיים במערכת (לפי טלפון)
     $customer_id = null;
     try {
