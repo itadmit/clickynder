@@ -14,534 +14,480 @@ if (!isLoggedIn()) {
     redirect("login.php");
 }
 
-// כותרת העמוד
-$page_title = "לוח בקרה";
+// קבלת ה-tenant_id מהסשן
+$tenant_id = $_SESSION['tenant_id'];
 
-// יצירת חיבור למסד הנתונים
+// חיבור למסד הנתונים
 $database = new Database();
 $db = $database->getConnection();
 
-// שליפת מידע על בעל העסק
-$tenant_id = $_SESSION['tenant_id'];
+// 1. קבלת מספר התורים להיום
+$today = date('Y-m-d');
+$query = "SELECT COUNT(*) as count FROM appointments 
+          WHERE tenant_id = :tenant_id 
+          AND DATE(start_datetime) = :today
+          AND status IN ('pending', 'confirmed')";
+$stmt = $db->prepare($query);
+$stmt->bindParam(":tenant_id", $tenant_id);
+$stmt->bindParam(":today", $today);
+$stmt->execute();
+$today_appointments_count = $stmt->fetch()['count'];
 
-try {
-    // שליפת פרטי העסק
-    $query = "SELECT * FROM tenants WHERE tenant_id = :tenant_id";
-    $stmt = $db->prepare($query);
-    $stmt->bindParam(":tenant_id", $tenant_id);
-    $stmt->execute();
-    $tenant = $stmt->fetch();
-    
-    // שליפת פרטי התורים להיום
-    $today = date('Y-m-d');
-    $query = "
-        SELECT a.*, c.first_name, c.last_name, c.phone, s.name as service_name, st.name as staff_name 
-        FROM appointments a
-        JOIN customers c ON a.customer_id = c.customer_id
-        JOIN services s ON a.service_id = s.service_id
-        JOIN staff st ON a.staff_id = st.staff_id
-        WHERE a.tenant_id = :tenant_id 
-        AND DATE(a.start_datetime) = :today
-        ORDER BY a.start_datetime ASC
-    ";
-    $stmt = $db->prepare($query);
-    $stmt->bindParam(":tenant_id", $tenant_id);
-    $stmt->bindParam(":today", $today);
-    $stmt->execute();
-    $todays_appointments = $stmt->fetchAll();
-    
-    // ספירת כל התורים של היום
-    $query = "
-        SELECT COUNT(*) as total_count 
-        FROM appointments 
-        WHERE tenant_id = :tenant_id 
-        AND DATE(start_datetime) = :today
-    ";
-    $stmt = $db->prepare($query);
-    $stmt->bindParam(":tenant_id", $tenant_id);
-    $stmt->bindParam(":today", $today);
-    $stmt->execute();
-    $appointments_count = $stmt->fetch()['total_count'];
-    
-    // חישוב הכנסות השבוע
-    $week_start = date('Y-m-d', strtotime('monday this week'));
-    $week_end = date('Y-m-d', strtotime('sunday this week'));
-    $query = "
-        SELECT SUM(s.price) as weekly_revenue
-        FROM appointments a
-        JOIN services s ON a.service_id = s.service_id
-        WHERE a.tenant_id = :tenant_id 
-        AND DATE(a.start_datetime) BETWEEN :week_start AND :week_end
-        AND a.status IN ('confirmed', 'completed')
-    ";
-    $stmt = $db->prepare($query);
-    $stmt->bindParam(":tenant_id", $tenant_id);
-    $stmt->bindParam(":week_start", $week_start);
-    $stmt->bindParam(":week_end", $week_end);
-    $stmt->execute();
-    $weekly_revenue = $stmt->fetch()['weekly_revenue'] ?? 0;
-    
-    // ספירת לקוחות חדשים החודש
-    $month_start = date('Y-m-01');
-    $query = "
-        SELECT COUNT(*) as new_customers
-        FROM customers
-        WHERE tenant_id = :tenant_id 
-        AND DATE(created_at) >= :month_start
-    ";
-    $stmt = $db->prepare($query);
-    $stmt->bindParam(":tenant_id", $tenant_id);
-    $stmt->bindParam(":month_start", $month_start);
-    $stmt->execute();
-    $new_customers = $stmt->fetch()['new_customers'];
-    
-    // שליפת פעילות אחרונה - 5 תורים אחרונים
-    $query = "
-        SELECT a.*, c.first_name, c.last_name, s.name as service_name, a.created_at
-        FROM appointments a
-        JOIN customers c ON a.customer_id = c.customer_id
-        JOIN services s ON a.service_id = s.service_id
-        WHERE a.tenant_id = :tenant_id
-        ORDER BY a.created_at DESC
-        LIMIT 5
-    ";
-    $stmt = $db->prepare($query);
-    $stmt->bindParam(":tenant_id", $tenant_id);
-    $stmt->execute();
-    $recent_activities = $stmt->fetchAll();
-    
-} catch (PDOException $e) {
-    $error_message = "שגיאת מערכת: " . $e->getMessage();
+// 2. קבלת מספר התורים לשבוע הקרוב
+$week_start = date('Y-m-d');
+$week_end = date('Y-m-d', strtotime('+7 days'));
+$query = "SELECT COUNT(*) as count FROM appointments 
+          WHERE tenant_id = :tenant_id 
+          AND DATE(start_datetime) BETWEEN :week_start AND :week_end
+          AND status IN ('pending', 'confirmed')";
+$stmt = $db->prepare($query);
+$stmt->bindParam(":tenant_id", $tenant_id);
+$stmt->bindParam(":week_start", $week_start);
+$stmt->bindParam(":week_end", $week_end);
+$stmt->execute();
+$week_appointments_count = $stmt->fetch()['count'];
+
+// 3. קבלת מספר התורים המחכים לאישור
+$query = "SELECT COUNT(*) as count FROM appointments 
+          WHERE tenant_id = :tenant_id AND status = 'pending'";
+$stmt = $db->prepare($query);
+$stmt->bindParam(":tenant_id", $tenant_id);
+$stmt->execute();
+$pending_appointments_count = $stmt->fetch()['count'];
+
+// 4. קבלת מספר הלקוחות הכולל
+$query = "SELECT COUNT(*) as count FROM customers WHERE tenant_id = :tenant_id";
+$stmt = $db->prepare($query);
+$stmt->bindParam(":tenant_id", $tenant_id);
+$stmt->execute();
+$customers_count = $stmt->fetch()['count'];
+
+// 5. חישוב סיכום הכנסות לחודש הנוכחי
+$month_start = date('Y-m-01');
+$month_end = date('Y-m-t');
+$query = "SELECT COUNT(*) as count, SUM(s.price) as income 
+          FROM appointments a
+          JOIN services s ON a.service_id = s.service_id
+          WHERE a.tenant_id = :tenant_id 
+          AND DATE(a.start_datetime) BETWEEN :month_start AND :month_end
+          AND a.status IN ('completed', 'confirmed')";
+$stmt = $db->prepare($query);
+$stmt->bindParam(":tenant_id", $tenant_id);
+$stmt->bindParam(":month_start", $month_start);
+$stmt->bindParam(":month_end", $month_end);
+$stmt->execute();
+$monthly_stats = $stmt->fetch();
+$monthly_income = $monthly_stats['income'] ?: 0;
+$monthly_completed_count = $monthly_stats['count'] ?: 0;
+
+// 6. קבלת סטטיסטיקה יומית לשבוע האחרון (לגרף)
+$days_back = 7;
+$start_date = date('Y-m-d', strtotime("-$days_back days"));
+$query = "SELECT DATE(start_datetime) as date, COUNT(*) as count
+          FROM appointments 
+          WHERE tenant_id = :tenant_id 
+          AND DATE(start_datetime) BETWEEN :start_date AND :today
+          GROUP BY DATE(start_datetime)
+          ORDER BY date ASC";
+$stmt = $db->prepare($query);
+$stmt->bindParam(":tenant_id", $tenant_id);
+$stmt->bindParam(":start_date", $start_date);
+$stmt->bindParam(":today", $today);
+$stmt->execute();
+$daily_stats = $stmt->fetchAll();
+
+// יצירת מערך עם כל הימים בטווח, כולל ימים ללא תורים
+$daily_data = [];
+for ($i = $days_back; $i >= 0; $i--) {
+    $day = date('Y-m-d', strtotime("-$i days"));
+    $daily_data[$day] = 0;
+}
+foreach ($daily_stats as $stat) {
+    $daily_data[$stat['date']] = intval($stat['count']);
 }
 
-// נתונים לצורך בדיקה
-$sample_data = [
-    'appointments_count' => $appointments_count,
-    'weekly_revenue' => $weekly_revenue,
-    'new_customers' => $new_customers
-];
+// 7. קבלת התורים הקרובים להיום
+$query = "SELECT a.*, 
+          CONCAT(c.first_name, ' ', c.last_name) as customer_name,
+          c.phone as customer_phone,
+          s.name as service_name,
+          st.name as staff_name
+          FROM appointments a
+          JOIN customers c ON a.customer_id = c.customer_id
+          JOIN services s ON a.service_id = s.service_id
+          JOIN staff st ON a.staff_id = st.staff_id
+          WHERE a.tenant_id = :tenant_id 
+          AND DATE(a.start_datetime) = :today
+          AND a.status IN ('pending', 'confirmed')
+          ORDER BY a.start_datetime ASC
+          LIMIT 5";
+$stmt = $db->prepare($query);
+$stmt->bindParam(":tenant_id", $tenant_id);
+$stmt->bindParam(":today", $today);
+$stmt->execute();
+$today_appointments = $stmt->fetchAll();
+
+// 8. קבלת השירותים הפופולריים ביותר
+$query = "SELECT s.name, COUNT(*) as count
+          FROM appointments a
+          JOIN services s ON a.service_id = s.service_id
+          WHERE a.tenant_id = :tenant_id 
+          AND a.status IN ('completed', 'confirmed')
+          GROUP BY a.service_id
+          ORDER BY count DESC
+          LIMIT 5";
+$stmt = $db->prepare($query);
+$stmt->bindParam(":tenant_id", $tenant_id);
+$stmt->execute();
+$popular_services = $stmt->fetchAll();
+
+// 9. סטטיסטיקה לפי נותני שירות
+$query = "SELECT st.name, COUNT(*) as count
+          FROM appointments a
+          JOIN staff st ON a.staff_id = st.staff_id
+          WHERE a.tenant_id = :tenant_id 
+          AND a.status IN ('completed', 'confirmed')
+          GROUP BY a.staff_id
+          ORDER BY count DESC";
+$stmt = $db->prepare($query);
+$stmt->bindParam(":tenant_id", $tenant_id);
+$stmt->execute();
+$staff_stats = $stmt->fetchAll();
+
+// כותרת העמוד
+$page_title = "לוח בקרה";
 ?>
 
 <?php include_once "includes/header.php"; ?>
 <?php include_once "includes/sidebar.php"; ?>
 
 <!-- Main Content -->
-<main class="flex-1 overflow-y-auto pb-10">
-    <!-- Top Navigation Bar -->
-    <header class="bg-white shadow-sm">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-            <h1 class="text-2xl font-bold text-gray-800">לוח בקרה</h1>
-            
-            <div class="flex items-center space-x-4 space-x-reverse">
-                <a href="#" class="relative">
-                    <i class="fas fa-bell text-gray-600 text-lg"></i>
-                    <span class="absolute -top-1 -right-1 bg-primary text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">3</span>
-                </a>
-                
-                <div class="flex items-center space-x-3 space-x-reverse">
-                    <img src="<?php echo !empty($tenant['logo_path']) ? htmlspecialchars($tenant['logo_path']) : 'https://via.placeholder.com/40'; ?>" alt="Profile" class="w-8 h-8 rounded-full">
-                    <span class="text-sm font-medium hidden md:block"><?php echo htmlspecialchars($tenant['business_name']); ?></span>
-                </div>
-            </div>
-        </div>
-    </header>
-
-    <!-- Dashboard Content -->
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <!-- Greeting and Date -->
-        <div class="mb-8">
-            <h2 class="text-2xl font-bold text-gray-800">שלום, <?php echo explode(' ', $tenant['business_name'])[0]; ?>! 👋</h2>
-            <p class="text-gray-600">היום <?php echo hebrewDayOfWeek(date('Y-m-d')); ?>, <?php echo date('d.m.Y'); ?></p>
-        </div>
+<main class="flex-1 overflow-y-auto py-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h1 class="text-3xl font-bold text-gray-800 mb-8">לוח בקרה</h1>
         
-        <!-- Stats Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <!-- קלפי סטטיסטיקה -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <!-- תורים להיום -->
             <div class="bg-white p-6 rounded-2xl shadow-sm">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <p class="text-gray-500 text-sm mb-1">תורים להיום</p>
-                        <h3 class="text-3xl font-bold"><?php echo $sample_data['appointments_count']; ?></h3>
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-pastel-blue text-secondary-dark">
+                        <i class="fas fa-calendar-day text-xl"></i>
                     </div>
-                    <div class="bg-pastel-purple p-3 rounded-xl">
-                        <i class="fas fa-calendar-day text-primary"></i>
+                    <div class="mr-4">
+                        <h2 class="text-gray-500 text-sm">תורים להיום</h2>
+                        <div class="flex items-center">
+                            <span class="text-2xl font-bold text-gray-800"><?php echo $today_appointments_count; ?></span>
+                        </div>
                     </div>
                 </div>
-                <div class="flex items-center mt-4 text-sm">
-                    <span class="text-green-500 flex items-center">
-                        <i class="fas fa-arrow-up mr-1"></i>
-                        20%
-                    </span>
-                    <span class="text-gray-500 mr-2">משבוע שעבר</span>
-                </div>
+                <a href="appointments.php?date=<?php echo $today; ?>" class="text-sm text-primary font-medium hover:underline block mt-2">צפה בכל התורים של היום</a>
             </div>
             
+            <!-- תורים לשבוע הקרוב -->
             <div class="bg-white p-6 rounded-2xl shadow-sm">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <p class="text-gray-500 text-sm mb-1">הכנסות השבוע</p>
-                        <h3 class="text-3xl font-bold">₪<?php echo number_format($sample_data['weekly_revenue'], 0); ?></h3>
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-pastel-green text-green-700">
+                        <i class="fas fa-calendar-week text-xl"></i>
                     </div>
-                    <div class="bg-pastel-green p-3 rounded-xl">
-                        <i class="fas fa-shekel-sign text-green-600"></i>
+                    <div class="mr-4">
+                        <h2 class="text-gray-500 text-sm">תורים לשבוע הקרוב</h2>
+                        <div class="flex items-center">
+                            <span class="text-2xl font-bold text-gray-800"><?php echo $week_appointments_count; ?></span>
+                        </div>
                     </div>
                 </div>
-                <div class="flex items-center mt-4 text-sm">
-                    <span class="text-green-500 flex items-center">
-                        <i class="fas fa-arrow-up mr-1"></i>
-                        15%
-                    </span>
-                    <span class="text-gray-500 mr-2">משבוע שעבר</span>
-                </div>
+                <a href="appointments.php?view=calendar" class="text-sm text-primary font-medium hover:underline block mt-2">צפה ביומן</a>
             </div>
             
+            <!-- הכנסות חודשיות -->
             <div class="bg-white p-6 rounded-2xl shadow-sm">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <p class="text-gray-500 text-sm mb-1">לקוחות חדשים</p>
-                        <h3 class="text-3xl font-bold"><?php echo $sample_data['new_customers']; ?></h3>
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-pastel-purple text-purple-700">
+                        <i class="fas fa-shekel-sign text-xl"></i>
                     </div>
-                    <div class="bg-pastel-blue p-3 rounded-xl">
-                        <i class="fas fa-users text-secondary"></i>
+                    <div class="mr-4">
+                        <h2 class="text-gray-500 text-sm">הכנסות החודש</h2>
+                        <div class="flex items-center">
+                            <span class="text-2xl font-bold text-gray-800"><?php echo number_format($monthly_income, 0); ?> ₪</span>
+                        </div>
                     </div>
                 </div>
-                <div class="flex items-center mt-4 text-sm">
-                    <span class="text-green-500 flex items-center">
-                        <i class="fas fa-arrow-up mr-1"></i>
-                        8%
-                    </span>
-                    <span class="text-gray-500 mr-2">מחודש קודם</span>
+                <a href="reports.php?type=income" class="text-sm text-primary font-medium hover:underline block mt-2">צפה בדוחות הכנסה</a>
+            </div>
+            
+            <!-- לקוחות כולל -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm">
+                <div class="flex items-center">
+                    <div class="p-3 rounded-full bg-pastel-orange text-orange-700">
+                        <i class="fas fa-users text-xl"></i>
+                    </div>
+                    <div class="mr-4">
+                        <h2 class="text-gray-500 text-sm">לקוחות רשומים</h2>
+                        <div class="flex items-center">
+                            <span class="text-2xl font-bold text-gray-800"><?php echo $customers_count; ?></span>
+                        </div>
+                    </div>
                 </div>
+                <a href="customers.php" class="text-sm text-primary font-medium hover:underline block mt-2">ניהול לקוחות</a>
             </div>
         </div>
         
-        <!-- Today's Appointments and Calendar Section -->
+        <!-- גרף סטטיסטיקה והתראות -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <!-- Today's Appointments -->
-            <div class="bg-white rounded-2xl shadow-sm overflow-hidden lg:col-span-1">
-                <div class="p-6 border-b">
-                    <h3 class="text-lg font-bold">התורים של היום</h3>
+            <!-- גרף סטטיסטיקה -->
+            <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm">
+                <h2 class="text-lg font-semibold mb-4">פעילות בשבוע האחרון</h2>
+                <div class="h-80">
+                    <canvas id="appointmentsChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- התראות וממתינים לאישור -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm">
+                <h2 class="text-lg font-semibold mb-4">התראות</h2>
+                
+                <?php if ($pending_appointments_count > 0): ?>
+                    <div class="bg-yellow-50 border-r-4 border-yellow-400 p-4 mb-4 rounded">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <i class="fas fa-clock text-yellow-400"></i>
+                            </div>
+                            <div class="mr-3">
+                                <p class="font-medium">יש <?php echo $pending_appointments_count; ?> תורים ממתינים לאישור</p>
+                                <a href="appointments.php?status=pending" class="text-sm text-primary hover:underline">צפה בתורים</a>
+                            </div>
+                        </div>
+                    </div>
+                <?php endif; ?>
+                
+                <div class="mb-4">
+                    <a href="appointments.php?new=1" class="block w-full bg-primary hover:bg-primary-dark text-white text-center py-2 px-4 rounded-xl transition duration-300">
+                        <i class="fas fa-plus ml-1"></i> קבע תור חדש
+                    </a>
                 </div>
                 
-                <div class="overflow-y-auto max-h-[400px]">
-                    <?php if (!empty($todays_appointments)): ?>
-                        <?php foreach ($todays_appointments as $appointment): ?>
-                            <!-- Appointment Item -->
-                            <div class="p-4 border-b hover:bg-gray-50">
-                                <div class="flex justify-between items-center mb-2">
-                                    <?php 
-                                    $status_class = '';
-                                    $status_text = '';
-                                    
-                                    switch ($appointment['status']) {
-                                        case 'pending':
-                                            $status_class = 'bg-pastel-yellow text-yellow-800';
-                                            $status_text = 'ממתין';
-                                            break;
-                                        case 'confirmed':
-                                            $status_class = 'bg-pastel-green text-green-800';
-                                            $status_text = 'מאושר';
-                                            break;
-                                        case 'cancelled':
-                                            $status_class = 'bg-pastel-red text-red-800';
-                                            $status_text = 'בוטל';
-                                            break;
-                                        case 'completed':
-                                            $status_class = 'bg-pastel-blue text-blue-800';
-                                            $status_text = 'הושלם';
-                                            break;
-                                        case 'no_show':
-                                            $status_class = 'bg-gray-200 text-gray-800';
-                                            $status_text = 'לא הגיע';
-                                            break;
-                                    }
-                                    ?>
-                                    <span class="<?php echo $status_class; ?> px-2 py-1 rounded-lg text-sm"><?php echo $status_text; ?></span>
-                                    <span class="text-sm text-gray-500">
-                                        <?php 
-                                        echo date('H:i', strtotime($appointment['start_datetime']));
-                                        echo ' - ';
-                                        echo date('H:i', strtotime($appointment['end_datetime']));
-                                        ?>
+                <h3 class="font-medium text-gray-700 mb-2 mt-6">קישורים מהירים</h3>
+                <div class="space-y-2">
+                    <a href="settings.php" class="block hover:bg-gray-100 p-2 rounded">
+                        <i class="fas fa-cog text-gray-500 ml-2"></i> הגדרות
+                    </a>
+                    <a href="staff.php" class="block hover:bg-gray-100 p-2 rounded">
+                        <i class="fas fa-user-tie text-gray-500 ml-2"></i> ניהול צוות
+                    </a>
+                    <a href="services.php" class="block hover:bg-gray-100 p-2 rounded">
+                        <i class="fas fa-concierge-bell text-gray-500 ml-2"></i> ניהול שירותים
+                    </a>
+                    <a href="reports.php" class="block hover:bg-gray-100 p-2 rounded">
+                        <i class="fas fa-chart-bar text-gray-500 ml-2"></i> דוחות וסטטיסטיקות
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- תורים הקרובים ושירותים פופולריים -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- תורים קרובים -->
+            <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold">תורים להיום</h2>
+                    <a href="appointments.php?date=<?php echo $today; ?>" class="text-sm text-primary hover:underline">
+                        ראה הכל
+                    </a>
+                </div>
+                
+                <?php if (empty($today_appointments)): ?>
+                    <div class="text-center py-8 bg-gray-50 rounded-xl">
+                        <div class="text-gray-400 mb-2"><i class="fas fa-calendar-check text-5xl"></i></div>
+                        <p class="text-gray-500">אין תורים מתוכננים להיום</p>
+                    </div>
+                <?php else: ?>
+                    <div class="space-y-3">
+                        <?php foreach ($today_appointments as $appointment): 
+                            // קביעת קלאס CSS לפי סטטוס
+                            $statusClass = '';
+                            $statusText = '';
+                            
+                            switch($appointment['status']) {
+                                case 'pending':
+                                    $statusClass = 'bg-yellow-100 text-yellow-800';
+                                    $statusText = 'ממתין';
+                                    break;
+                                case 'confirmed':
+                                    $statusClass = 'bg-green-100 text-green-800';
+                                    $statusText = 'מאושר';
+                                    break;
+                            }
+                        ?>
+                            <div class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+                                <div class="text-center w-16">
+                                    <div class="text-lg font-bold text-gray-800"><?php echo date('H:i', strtotime($appointment['start_datetime'])); ?></div>
+                                </div>
+                                <div class="mr-4 flex-grow">
+                                    <div class="font-medium"><?php echo htmlspecialchars($appointment['customer_name']); ?></div>
+                                    <div class="text-sm text-gray-500"><?php echo htmlspecialchars($appointment['service_name']); ?> | <?php echo htmlspecialchars($appointment['staff_name']); ?></div>
+                                </div>
+                                <div class="text-left">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full <?php echo $statusClass; ?>">
+                                        <?php echo $statusText; ?>
                                     </span>
                                 </div>
-                                <div class="flex items-center">
-                                    <div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold">
-                                        <?php echo mb_substr($appointment['first_name'], 0, 1, 'UTF-8') . mb_substr($appointment['last_name'], 0, 1, 'UTF-8'); ?>
-                                    </div>
-                                    <div class="mr-3">
-                                        <h4 class="font-medium"><?php echo htmlspecialchars($appointment['first_name'] . ' ' . $appointment['last_name']); ?></h4>
-                                        <p class="text-sm text-gray-500"><?php echo htmlspecialchars($appointment['service_name']); ?></p>
-                                    </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+            
+            <!-- שירותים פופולריים -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm">
+                <h2 class="text-lg font-semibold mb-4">שירותים פופולריים</h2>
+                
+                <?php if (empty($popular_services)): ?>
+                    <div class="text-center py-8 bg-gray-50 rounded-xl">
+                        <div class="text-gray-400 mb-2"><i class="fas fa-concierge-bell text-5xl"></i></div>
+                        <p class="text-gray-500">אין מספיק נתונים להצגה</p>
+                    </div>
+                <?php else: ?>
+                    <div class="space-y-4">
+                        <?php foreach ($popular_services as $index => $service): 
+                            // צבעים שונים לכל שירות
+                            $colors = ['bg-primary', 'bg-secondary', 'bg-green-500', 'bg-yellow-500', 'bg-red-500'];
+                            $color = $colors[$index % count($colors)];
+                        ?>
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-gray-700"><?php echo htmlspecialchars($service['name']); ?></span>
+                                    <span class="text-gray-500"><?php echo $service['count']; ?> תורים</span>
                                 </div>
-                                <div class="flex justify-between mt-3">
-                                    <span class="text-sm text-gray-500"><?php echo htmlspecialchars($appointment['staff_name']); ?></span>
-                                    <div>
-                                        <a href="tel:<?php echo htmlspecialchars($appointment['phone']); ?>" class="text-gray-400 hover:text-primary mr-2">
-                                            <i class="fas fa-phone-alt"></i>
-                                        </a>
-                                        <button class="text-gray-400 hover:text-primary appointment-options" data-id="<?php echo $appointment['appointment_id']; ?>">
-                                            <i class="fas fa-ellipsis-v"></i>
-                                        </button>
-                                    </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="<?php echo $color; ?> h-2 rounded-full" style="width: <?php echo min(100, ($service['count'] / 10) * 100); ?>%"></div>
                                 </div>
                             </div>
                         <?php endforeach; ?>
-                    <?php else: ?>
-                        <div class="p-6 text-center text-gray-500">
-                            <i class="fas fa-calendar-day text-gray-300 text-4xl mb-3"></i>
-                            <p>אין תורים מתוכננים להיום</p>
-                        </div>
-                    <?php endif; ?>
-                </div>
+                    </div>
+                <?php endif; ?>
                 
-                <div class="p-4 text-center">
-                    <a href="appointments.php" class="text-primary font-medium hover:underline">כל התורים</a>
-                </div>
-            </div>
-            
-            <!-- Calendar Section -->
-            <div class="bg-white rounded-2xl shadow-sm overflow-hidden lg:col-span-2">
-                <div class="p-6 border-b">
-                    <h3 class="text-lg font-bold">לוח שנה</h3>
-                </div>
-                <div class="p-4">
-                    <div id="calendar" class="min-h-[400px]"></div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Recent Activities and Confirmation Status -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Recent Activities -->
-            <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
-                <div class="p-6 border-b">
-                    <h3 class="text-lg font-bold">פעילות אחרונה</h3>
-                </div>
+                <!-- צוות -->
+                <h2 class="text-lg font-semibold mt-8 mb-4">ביצועי צוות</h2>
                 
-                <div class="overflow-y-auto max-h-[350px]">
-                    <?php if (!empty($recent_activities)): ?>
-                        <?php foreach ($recent_activities as $activity): ?>
-                            <div class="p-4 border-b">
-                                <div class="flex items-start">
-                                    <div class="relative">
-                                        <?php 
-                                        $icon_class = '';
-                                        $bg_class = '';
-                                        $status_indicator = '';
-                                        
-                                        switch ($activity['status']) {
-                                            case 'pending':
-                                                $icon_class = 'fas fa-calendar-plus text-secondary';
-                                                $bg_class = 'bg-pastel-blue';
-                                                $status_indicator = 'bg-yellow-500';
-                                                $activity_text = 'תור חדש נקבע';
-                                                break;
-                                            case 'confirmed':
-                                                $icon_class = 'fas fa-check text-green-600';
-                                                $bg_class = 'bg-pastel-green';
-                                                $status_indicator = 'bg-green-500';
-                                                $activity_text = 'תור אושר';
-                                                break;
-                                            case 'cancelled':
-                                                $icon_class = 'fas fa-times text-red-600';
-                                                $bg_class = 'bg-pastel-red';
-                                                $status_indicator = 'bg-red-500';
-                                                $activity_text = 'תור בוטל';
-                                                break;
-                                            case 'completed':
-                                                $icon_class = 'fas fa-check-double text-blue-600';
-                                                $bg_class = 'bg-pastel-blue';
-                                                $status_indicator = 'bg-blue-500';
-                                                $activity_text = 'תור הושלם';
-                                                break;
-                                            default:
-                                                $icon_class = 'fas fa-calendar-day text-gray-600';
-                                                $bg_class = 'bg-gray-200';
-                                                $status_indicator = 'bg-gray-500';
-                                                $activity_text = 'עדכון תור';
-                                        }
-                                        ?>
-                                        <div class="<?php echo $bg_class; ?> p-2 rounded-lg">
-                                            <i class="<?php echo $icon_class; ?>"></i>
-                                        </div>
-                                        <div class="absolute top-0 right-0 transform translate-x-1/3 -translate-y-1/3 bg-white p-1 rounded-full border">
-                                            <div class="<?php echo $status_indicator; ?> w-2 h-2 rounded-full"></div>
-                                        </div>
-                                    </div>
-                                    <div class="mr-4">
-                                        <p class="font-medium"><?php echo $activity_text; ?></p>
-                                        <p class="text-gray-500 text-sm">
-                                            <?php echo htmlspecialchars($activity['first_name'] . ' ' . $activity['last_name']); ?> 
-                                            <?php
-                                            $activity_description = '';
-                                            switch ($activity['status']) {
-                                                case 'pending':
-                                                    $activity_description = 'קבע/ה תור ל' . $activity['service_name'];
-                                                    break;
-                                                case 'confirmed':
-                                                    $activity_description = 'אישר/ה את הגעתו/ה לתור';
-                                                    break;
-                                                case 'cancelled':
-                                                    $activity_description = 'ביטל/ה את התור';
-                                                    break;
-                                                case 'completed':
-                                                    $activity_description = 'השלים/ה את הפגישה';
-                                                    break;
-                                                default:
-                                                    $activity_description = 'עדכן/ה את התור';
-                                            }
-                                            echo $activity_description;
-                                            ?>
-                                        </p>
-                                        <p class="text-gray-400 text-xs mt-1">
-                                            <?php 
-                                            $time_diff = time() - strtotime($activity['created_at']);
-                                            if ($time_diff < 60) {
-                                                echo 'לפני פחות מדקה';
-                                            } elseif ($time_diff < 3600) {
-                                                echo 'לפני ' . floor($time_diff / 60) . ' דקות';
-                                            } elseif ($time_diff < 86400) {
-                                                echo 'לפני ' . floor($time_diff / 3600) . ' שעות';
-                                            } else {
-                                                echo 'לפני ' . floor($time_diff / 86400) . ' ימים';
-                                            }
-                                            ?>
-                                        </p>
-                                    </div>
+                <?php if (empty($staff_stats)): ?>
+                    <div class="text-center py-8 bg-gray-50 rounded-xl">
+                        <div class="text-gray-400 mb-2"><i class="fas fa-user-tie text-5xl"></i></div>
+                        <p class="text-gray-500">אין מספיק נתונים להצגה</p>
+                    </div>
+                <?php else: ?>
+                    <div class="space-y-4">
+                        <?php foreach ($staff_stats as $index => $staff): 
+                            // הצגת רק ה-3 הראשונים
+                            if ($index >= 3) break;
+                            // צבעים שונים לכל עובד
+                            $colors = ['bg-green-500', 'bg-blue-500', 'bg-purple-500'];
+                            $color = $colors[$index % count($colors)];
+                        ?>
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-gray-700"><?php echo htmlspecialchars($staff['name']); ?></span>
+                                    <span class="text-gray-500"><?php echo $staff['count']; ?> תורים</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="<?php echo $color; ?> h-2 rounded-full" style="width: <?php echo min(100, ($staff['count'] / 10) * 100); ?>%"></div>
                                 </div>
                             </div>
                         <?php endforeach; ?>
-                    <?php else: ?>
-                        <div class="p-6 text-center text-gray-500">
-                            <p>אין פעילות אחרונה להצגה</p>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-            
-            <!-- Confirmation Status -->
-            <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
-                <div class="p-6 border-b">
-                    <h3 class="text-lg font-bold">סטטוס אישורי הגעה</h3>
-                </div>
-                
-                <div class="p-6">
-                    <!-- Appointments Confirmation Distribution -->
-                    <div class="flex items-center justify-center mb-6">
-                        <div class="w-full max-w-xs">
-                            <div class="relative pt-1">
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-green-600 bg-green-200">
-                                            מאושרים
-                                        </span>
-                                    </div>
-                                    <div class="text-right">
-                                        <span class="text-xs font-semibold inline-block text-green-600">
-                                            70%
-                                        </span>
-                                    </div>
-                                </div>
-                                <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-green-200">
-                                    <div style="width:70%" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-green-500"></div>
-                                </div>
-                            </div>
-                            
-                            <div class="relative pt-1">
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-yellow-600 bg-yellow-200">
-                                            ממתינים
-                                        </span>
-                                    </div>
-                                    <div class="text-right">
-                                        <span class="text-xs font-semibold inline-block text-yellow-600">
-                                            20%
-                                        </span>
-                                    </div>
-                                </div>
-                                <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-yellow-200">
-                                    <div style="width:20%" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-yellow-500"></div>
-                                </div>
-                            </div>
-                            
-                            <div class="relative pt-1">
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-red-600 bg-red-200">
-                                            מבוטלים
-                                        </span>
-                                    </div>
-                                    <div class="text-right">
-                                        <span class="text-xs font-semibold inline-block text-red-600">
-                                            10%
-                                        </span>
-                                    </div>
-                                </div>
-                                <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-red-200">
-                                    <div style="width:10%" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-red-500"></div>
-                                </div>
-                            </div>
-                        </div>
                     </div>
-                    
-                    <div class="text-center mt-6">
-                        <p class="text-sm text-gray-500 mb-4">7 תורים מתוכננים ליומיים הקרובים מחכים לאישור</p>
-                        <a href="appointments.php?filter=pending" class="inline-block bg-primary hover:bg-primary-dark text-white font-bold py-2 px-6 rounded-xl transition duration-300">
-                            שלח תזכורות
-                        </a>
-                    </div>
-                </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
 </main>
 
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // יצירת לוח השנה
-        var calendarEl = document.getElementById('calendar');
-        var calendar = new FullCalendar.Calendar(calendarEl, {
-            locale: 'he',
-            initialView: 'dayGridMonth',
-            height: 'auto',
-            headerToolbar: {
-                left: 'prev,next today',
-                center: 'title',
-                right: 'dayGridMonth,timeGridWeek,timeGridDay'
-            },
-            buttonText: {
-                today: 'היום',
-                month: 'חודש',
-                week: 'שבוע',
-                day: 'יום'
-            },
-            direction: 'rtl',
-            firstDay: 0, // יום ראשון כיום ראשון בשבוע
-            events: [
-                // כאן יהיו נתוני התורים האמיתיים - לדוגמה בינתיים
-                <?php foreach ($todays_appointments as $appointment): ?>
-                {
-                    title: '<?php echo addslashes($appointment['service_name'] . ' - ' . $appointment['first_name'] . ' ' . $appointment['last_name']); ?>',
-                    start: '<?php echo $appointment['start_datetime']; ?>',
-                    end: '<?php echo $appointment['end_datetime']; ?>',
-                    <?php if ($appointment['status'] == 'confirmed'): ?>
-                    backgroundColor: '#10b981',
-                    borderColor: '#10b981',
-                    <?php elseif ($appointment['status'] == 'pending'): ?>
-                    backgroundColor: '#f59e0b',
-                    borderColor: '#f59e0b',
-                    <?php elseif ($appointment['status'] == 'cancelled'): ?>
-                    backgroundColor: '#ef4444',
-                    borderColor: '#ef4444',
-                    <?php endif; ?>
-                    url: 'appointment_details.php?id=<?php echo $appointment['appointment_id']; ?>'
+document.addEventListener('DOMContentLoaded', function() {
+    // גרף תורים בשבוע האחרון
+    var ctx = document.getElementById('appointmentsChart').getContext('2d');
+    
+    var dailyData = <?php 
+        $labels = [];
+        $values = [];
+        
+        foreach ($daily_data as $date => $count) {
+            // Format date for display: "יום א' 01/01"
+            $day_num = date('w', strtotime($date));
+            $day_names = ['א\'', 'ב\'', 'ג\'', 'ד\'', 'ה\'', 'ו\'', 'ש\''];
+            $formatted_date = 'יום ' . $day_names[$day_num] . ' ' . date('d/m', strtotime($date));
+            
+            $labels[] = $formatted_date;
+            $values[] = $count;
+        }
+        
+        echo json_encode([
+            'labels' => $labels,
+            'values' => $values
+        ]);
+    ?>;
+    
+    var chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dailyData.labels,
+            datasets: [{
+                label: 'מספר תורים',
+                data: dailyData.values,
+                fill: false,
+                borderColor: '#ec4899', // primary color
+                backgroundColor: '#ec4899',
+                tension: 0.4,
+                borderWidth: 3,
+                pointBackgroundColor: '#fff',
+                pointBorderColor: '#ec4899',
+                pointBorderWidth: 2,
+                pointRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        display: true,
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    },
+                    ticks: {
+                        precision: 0
+                    }
                 },
-                <?php endforeach; ?>
-            ]
-        });
-        calendar.render();
+                x: {
+                    grid: {
+                        display: false
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                    padding: 10,
+                    titleFont: {
+                        size: 14
+                    },
+                    bodyFont: {
+                        size: 14
+                    },
+                    rtl: true,
+                    titleAlign: 'right',
+                    bodyAlign: 'right'
+                }
+            }
+        }
     });
+});
 </script>
 
 <?php include_once "includes/footer.php"; ?>

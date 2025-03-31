@@ -23,6 +23,8 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="../assets/css/calendar.css">
+  
     <?php if ($current_page == 'dashboard' || $current_page == 'appointments'): ?>
     <!-- FullCalendar library -->
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.css" rel="stylesheet">

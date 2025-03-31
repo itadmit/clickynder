@@ -1,0 +1,199 @@
+/* calendar.css - הוסף קובץ זה לפרויקט או שלב את התוכן ב-style בתוך header.php */
+
+/* עיצוב לוח השנה */
+.calendar-grid {
+    display: flex;
+    flex-direction: column;
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+    background-color: #fff;
+}
+
+/* כותרת ימי השבוע */
+.calendar-grid-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background-color: #f3f4f6;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.calendar-header-cell {
+    padding: 12px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #4b5563;
+}
+
+/* תאים של הימים */
+.calendar-grid-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    grid-auto-rows: minmax(120px, 1fr);
+}
+
+.calendar-day {
+    border-right: 1px solid #e5e7eb;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 10px;
+    position: relative;
+    min-height: 120px;
+    background-color: #fff;
+    transition: background-color 0.2s;
+}
+
+.calendar-day:hover {
+    background-color: #f9fafb;
+}
+
+.calendar-day-number {
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: inline-block;
+    height: 28px;
+    width: 28px;
+    text-align: center;
+    line-height: 28px;
+    border-radius: 50%;
+}
+
+/* עיצוב תאים מיוחדים */
+.calendar-day-today {
+    background-color: #f0f9ff;
+    box-shadow: inset 0 0 0 2px #3b82f6;
+}
+
+.calendar-day-today .calendar-day-number {
+    background-color: #3b82f6;
+    color: white;
+}
+
+.calendar-day-weekend {
+    background-color: #f9fafb;
+}
+
+.calendar-day-other-month {
+    background-color: #f9fafb;
+    color: #9ca3af;
+}
+
+.calendar-day-closed {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
+.calendar-day-special {
+    background-color: #e0f2fe;
+}
+
+/* תגיות חריגות */
+.calendar-day-closed-tag {
+    position: absolute;
+    top: 10px;
+    right: 40px;
+    background-color: #ef4444;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.calendar-day-special-hours {
+    position: absolute;
+    top: 10px;
+    right: 40px;
+    background-color: #3b82f6;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* עיצוב התורים בתוך התא */
+.calendar-appointments {
+    margin-top: 8px;
+    max-height: calc(100% - 36px);
+    overflow-y: auto;
+}
+
+.calendar-appointment {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 4px 6px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.1s;
+    font-size: 0.75rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.calendar-appointment:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* עיצובים נוספים */
+.max-h-90vh {
+    max-height: 90vh;
+}
+
+/* תמיכה במסכים קטנים */
+@media (max-width: 768px) {
+    .calendar-grid-days {
+        grid-auto-rows: minmax(100px, 1fr);
+    }
+    
+    .calendar-day {
+        min-height: 100px;
+        padding: 8px;
+    }
+    
+    .calendar-day-number {
+        font-size: 0.875rem;
+        height: 24px;
+        width: 24px;
+        line-height: 24px;
+    }
+    
+    .calendar-day-closed-tag,
+    .calendar-day-special-hours {
+        font-size: 0.65rem;
+        padding: 1px 4px;
+        right: 35px;
+    }
+    
+    .calendar-appointment {
+        padding: 2px 4px;
+        font-size: 0.7rem;
+    }
+}
+
+/* תמיכה במסכים קטנים מאוד */
+@media (max-width: 640px) {
+    .calendar-header-cell {
+        padding: 8px 4px;
+        font-size: 0.75rem;
+    }
+    
+    .calendar-grid-days {
+        grid-auto-rows: minmax(80px, 1fr);
+    }
+    
+    .calendar-day {
+        min-height: 80px;
+        padding: 6px;
+    }
+    
+    .calendar-day-number {
+        margin-bottom: 4px;
+    }
+    
+    .calendar-appointment {
+        margin-bottom: 2px;
+    }
+}
