@@ -34,6 +34,113 @@ $filter = isset($_GET['filter']) ? sanitizeInput($_GET['filter']) : '';
 $error_message = "";
 $success_message = "";
 
+// בדיקת מגבלת לקוחות
+try {
+    // בדיקה אם העמודה max_customers קיימת
+    $stmt = $db->query("SHOW COLUMNS FROM subscriptions LIKE 'max_customers'");
+    if ($stmt->rowCount() == 0) {
+        // אם העמודה לא קיימת, נציג את המסלול הבסיסי
+        $query = "SELECT * FROM subscriptions WHERE name = 'רגיל'";
+        $stmt = $db->prepare($query);
+        $stmt->execute();
+        $subscription_data = $stmt->fetch();
+        
+        if ($subscription_data) {
+            $customer_limit = [
+                'max_customers' => 10, // ערך ברירת מחדל
+                'current_customers' => 0
+            ];
+        } else {
+            $customer_limit = [
+                'max_customers' => 0,
+                'current_customers' => 0
+            ];
+        }
+    } else {
+        // אם העמודה קיימת, נמשיך עם השאילתה הרגילה
+        $query = "SELECT s.*, COUNT(c.customer_id) as current_customers 
+                FROM subscriptions s 
+                JOIN tenant_subscriptions ts ON ts.subscription_id = s.id 
+                LEFT JOIN customers c ON c.tenant_id = :tenant_id1 
+                WHERE ts.tenant_id = :tenant_id2 
+                GROUP BY s.id, s.name, s.price, s.max_staff_members, s.max_customers, s.features, s.created_at";
+        $stmt = $db->prepare($query);
+        $stmt->bindParam(":tenant_id1", $_SESSION['tenant_id']);
+        $stmt->bindParam(":tenant_id2", $_SESSION['tenant_id']);
+        $stmt->execute();
+        $result = $stmt->fetch();
+        
+        if ($result) {
+            $subscription_data = [
+                'id' => $result['id'],
+                'name' => $result['name'],
+                'price' => $result['price'],
+                'max_staff_members' => $result['max_staff_members'],
+                'max_customers' => $result['max_customers'],
+                'features' => $result['features']
+            ];
+            $customer_limit = [
+                'max_customers' => $result['max_customers'],
+                'current_customers' => $result['current_customers']
+            ];
+        } else {
+            // אם אין מסלול פעיל, נציג את המסלול הבסיסי
+            $query = "SELECT * FROM subscriptions WHERE name = 'רגיל'";
+            $stmt = $db->prepare($query);
+            $stmt->execute();
+            $subscription_data = $stmt->fetch();
+            
+            if ($subscription_data) {
+                // הוספת המסלול הבסיסי ל-tenant_subscriptions
+                $query = "INSERT INTO tenant_subscriptions (tenant_id, subscription_id) VALUES (:tenant_id, :subscription_id)";
+                $stmt = $db->prepare($query);
+                $stmt->bindParam(":tenant_id", $_SESSION['tenant_id']);
+                $stmt->bindParam(":subscription_id", $subscription_data['id']);
+                $stmt->execute();
+                
+                // שליפת מספר הלקוחות הנוכחי
+                $query = "SELECT COUNT(*) as current_customers FROM customers WHERE tenant_id = :tenant_id";
+                $stmt = $db->prepare($query);
+                $stmt->bindParam(":tenant_id", $_SESSION['tenant_id']);
+                $stmt->execute();
+                $customer_count = $stmt->fetch();
+                $customer_limit = [
+                    'max_customers' => $subscription_data['max_customers'] ?? 10,
+                    'current_customers' => $customer_count['current_customers']
+                ];
+            } else {
+                // אם אין אפילו מסלול בסיסי, נציג הודעת שגיאה
+                echo '<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6" role="alert">
+                        לא נמצא מסלול פעיל. אנא צור קשר עם התמיכה.
+                      </div>';
+                $subscription_data = [
+                    'name' => 'לא זמין',
+                    'max_customers' => 0
+                ];
+                $customer_limit = [
+                    'max_customers' => 0,
+                    'current_customers' => 0
+                ];
+            }
+        }
+    }
+} catch (PDOException $e) {
+    // במקרה של שגיאה, נציג את המסלול הבסיסי
+    $subscription_data = [
+        'name' => 'רגיל',
+        'max_customers' => 10
+    ];
+    $customer_limit = [
+        'max_customers' => 10,
+        'current_customers' => 0
+    ];
+}
+
+// בדיקה אם הגענו למגבלת הלקוחות
+if ($customer_limit['current_customers'] >= $customer_limit['max_customers']) {
+    $error_message = "הגעת למגבלת הלקוחות במסלול שלך. כדי להוסיף לקוחות נוספים, יש לשדרג את המסלול.";
+}
+
 // טיפול במחיקת לקוח
 if (isset($_GET['delete']) && !empty($_GET['delete'])) {
     $customer_id = intval($_GET['delete']);
@@ -164,9 +271,27 @@ $page_title = "ניהול לקוחות";
         <div class="flex justify-between items-center mb-6">
             <h1 class="text-3xl font-bold text-gray-800">ניהול לקוחות</h1>
             
-            <button type="button" class="bg-primary hover:bg-primary-dark text-white font-bold py-2 px-4 rounded-xl transition duration-300" onclick="openAddModal()">
-                <i class="fas fa-user-plus mr-1"></i> הוסף לקוח חדש
-            </button>
+            <div class="flex items-center">
+                <div class="ml-4 text-sm">
+                    <span class="font-semibold">מסלול נוכחי:</span>
+                    <span class="text-primary"><?php echo htmlspecialchars($subscription_data['name']); ?></span>
+                    <br>
+                    <span class="font-semibold">מגבלת לקוחות:</span>
+                    <span class="<?php echo ($customer_limit['current_customers'] >= $customer_limit['max_customers']) ? 'text-red-500' : 'text-green-500'; ?>">
+                        <?php echo $customer_limit['current_customers']; ?> / <?php echo $customer_limit['max_customers']; ?>
+                    </span>
+                    <?php if ($customer_limit['current_customers'] >= $customer_limit['max_customers']): ?>
+                        <br>
+                        <a href="settings.php#subscription" class="text-primary hover:text-primary-dark font-semibold">
+                            <i class="fas fa-arrow-circle-up ml-1"></i> שדרג את המסלול שלך
+                        </a>
+                    <?php endif; ?>
+                </div>
+                
+                <button type="button" class="bg-primary hover:bg-primary-dark text-white font-bold py-2 px-4 rounded-xl transition duration-300" onclick="openAddModal()" <?php echo ($customer_limit['current_customers'] >= $customer_limit['max_customers']) ? 'disabled' : ''; ?>>
+                    <i class="fas fa-user-plus ml-1"></i> הוסף לקוח
+                </button>
+            </div>
         </div>
         
         <?php if (!empty($error_message)): ?>

@@ -74,6 +74,21 @@ include_once "includes/sidebar.php";
 ?>
 
 <!-- Main Content -->
+<style>
+.appointment-item {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.appointment-item:hover {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.calendar-day {
+    min-height: 120px;
+    height: auto;
+}
+</style>
 <main class="flex-1 overflow-y-auto pb-10">
     <!-- Top Navigation Bar -->
     <header class="bg-white shadow-sm">
@@ -497,26 +512,46 @@ document.addEventListener('DOMContentLoaded', function() {
                                 const startTime = appointment.start.split(' ')[1].substr(0, 5);
                                 const customerName = appointment.customer.name;
                                 
-                                // בחירת צבע לפי סטטוס
-                                let statusColor = '';
+                                // קביעת צבע הסטטוס
+                                let statusColor;
                                 switch (appointment.status) {
-                                    case 'pending': statusColor = 'bg-yellow-400'; break;
-                                    case 'confirmed': statusColor = 'bg-green-500'; break;
-                                    case 'cancelled': statusColor = 'bg-red-500'; break;
-                                    case 'completed': statusColor = 'bg-blue-500'; break;
-                                    case 'no_show': statusColor = 'bg-gray-500'; break;
-                                    default: statusColor = 'bg-gray-400';
+                                    case 'pending':
+                                        statusColor = 'bg-yellow-400';
+                                        break;
+                                    case 'confirmed':
+                                        statusColor = 'bg-green-500';
+                                        break;
+                                    case 'completed':
+                                        statusColor = 'bg-blue-500';
+                                        break;
+                                    case 'cancelled':
+                                        statusColor = 'bg-red-500';
+                                        break;
+                                    case 'no_show':
+                                        statusColor = 'bg-gray-500';
+                                        break;
+                                    default:
+                                        statusColor = 'bg-gray-300';
                                 }
                                 
+                                // יצירת אלמנט התור
                                 const appointmentElement = document.createElement('div');
-                                appointmentElement.className = `calendar-appointment ${statusColor} text-white rounded-lg p-1 mb-1 cursor-pointer text-xs truncate`;
+                                appointmentElement.className = 'appointment-item flex items-center p-2 mb-1 rounded-lg cursor-pointer transition duration-300 hover:opacity-80';
+                                const color = appointment.backgroundColor || '#ffffff';
+                                const r = parseInt(color.slice(1,3), 16);
+                                const g = parseInt(color.slice(3,5), 16);
+                                const b = parseInt(color.slice(5,7), 16);
+                                appointmentElement.style.backgroundColor = `rgba(${r}, ${g}, ${b}, 0.2)`;
                                 appointmentElement.setAttribute('data-appointment-id', appointment.id);
-                                appointmentElement.innerHTML = `${startTime} - ${customerName}`;
                                 
-                                appointmentElement.addEventListener('click', function() {
-                                    showAppointmentDetails(appointment.id);
-                                });
+                                appointmentElement.innerHTML = `
+                                    <div class="flex items-center flex-1">
+                                        <div class="w-3 h-3 rounded-full ${statusColor} ml-2"></div>
+                                        <span class="text-sm">${startTime} - ${customerName}</span>
+                                    </div>
+                                `;
                                 
+                                appointmentElement.addEventListener('click', () => showAppointmentDetails(appointment.id));
                                 appointmentsContainer.appendChild(appointmentElement);
                             });
                         }

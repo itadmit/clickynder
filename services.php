@@ -17,9 +17,94 @@ if (!isLoggedIn()) {
 // קבלת ה-tenant_id מהסשן
 $tenant_id = $_SESSION['tenant_id'];
 
+// אתחול משתנים
+$subscription_data = null;
+$service_limit = null;
+
 // חיבור למסד הנתונים
 $database = new Database();
 $db = $database->getConnection();
+
+// בדיקת מגבלת שירותים
+try {
+    // שליפת המסלול הנוכחי של הטננט
+    $query = "SELECT s.*, COUNT(se.service_id) as current_services 
+             FROM subscriptions s 
+             JOIN tenant_subscriptions ts ON ts.subscription_id = s.id
+             LEFT JOIN services se ON se.tenant_id = :tenant_id1 
+             WHERE ts.tenant_id = :tenant_id2 
+             GROUP BY s.id";
+    $stmt = $db->prepare($query);
+    $stmt->bindParam(":tenant_id1", $tenant_id);
+    $stmt->bindParam(":tenant_id2", $tenant_id);
+    $stmt->execute();
+    $result = $stmt->fetch();
+    
+    if ($result) {
+        $subscription_data = [
+            'id' => $result['id'],
+            'name' => $result['name'],
+            'price' => $result['price'],
+            'max_staff_members' => $result['max_staff_members'],
+            'max_customers' => $result['max_customers'],
+            'max_services' => $result['max_services'],
+            'features' => $result['features']
+        ];
+        $service_limit = [
+            'max_services' => $result['max_services'],
+            'current_services' => $result['current_services']
+        ];
+    } else {
+        // אם אין מסלול פעיל, נציג את המסלול הבסיסי
+        $query = "SELECT * FROM subscriptions WHERE name = 'רגיל'";
+        $stmt = $db->prepare($query);
+        $stmt->execute();
+        $subscription_data = $stmt->fetch();
+        
+        if ($subscription_data) {
+            // הוספת המסלול הבסיסי ל-tenant_subscriptions
+            $query = "INSERT INTO tenant_subscriptions (tenant_id, subscription_id) VALUES (:tenant_id, :subscription_id)";
+            $stmt = $db->prepare($query);
+            $stmt->bindParam(":tenant_id", $tenant_id);
+            $stmt->bindParam(":subscription_id", $subscription_data['id']);
+            $stmt->execute();
+            
+            // שליפת מספר השירותים הנוכחי
+            $query = "SELECT COUNT(*) as current_services FROM services WHERE tenant_id = :tenant_id";
+            $stmt = $db->prepare($query);
+            $stmt->bindParam(":tenant_id", $tenant_id);
+            $stmt->execute();
+            $service_count = $stmt->fetch();
+            $service_limit = [
+                'max_services' => $subscription_data['max_services'] ?? 1,
+                'current_services' => $service_count['current_services']
+            ];
+        } else {
+            // אם אין אפילו מסלול בסיסי, נציג הודעת שגיאה
+            echo '<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6" role="alert">
+                    לא נמצא מסלול פעיל. אנא צור קשר עם התמיכה.
+                  </div>';
+            $subscription_data = [
+                'name' => 'לא זמין',
+                'max_services' => 0
+            ];
+            $service_limit = [
+                'max_services' => 0,
+                'current_services' => 0
+            ];
+        }
+    }
+} catch (PDOException $e) {
+    // במקרה של שגיאה, נציג את המסלול הבסיסי
+    $subscription_data = [
+        'name' => 'רגיל',
+        'max_services' => 1
+    ];
+    $service_limit = [
+        'max_services' => 1,
+        'current_services' => 0
+    ];
+}
 
 // משתנים להודעות
 $error_message = "";
@@ -145,39 +230,44 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 }
                 // אם זו הוספת שירות חדש
                 else if (isset($_POST['add_service'])) {
-                    // הוספת שירות חדש
-                    $query = "INSERT INTO services (tenant_id, name, category_id, description, duration, price, buffer_time_before, buffer_time_after, color, is_active) 
-                            VALUES (:tenant_id, :name, :category_id, :description, :duration, :price, :buffer_before, :buffer_after, :color, :is_active)";
-                    
-                    $stmt = $db->prepare($query);
-                    $stmt->bindParam(":tenant_id", $tenant_id);
-                    $stmt->bindParam(":name", $service_name);
-                    $stmt->bindParam(":category_id", $category_id);
-                    $stmt->bindParam(":description", $description);
-                    $stmt->bindParam(":duration", $duration);
-                    $stmt->bindParam(":price", $price);
-                    $stmt->bindParam(":buffer_before", $buffer_before);
-                    $stmt->bindParam(":buffer_after", $buffer_after);
-                    $stmt->bindParam(":color", $color);
-                    $stmt->bindParam(":is_active", $is_active);
-                    
-                    if ($stmt->execute()) {
-                        $service_id = $db->lastInsertId();
-                        
-                        // אם יש אנשי צוות לשייך
-                        if (isset($_POST['staff']) && is_array($_POST['staff'])) {
-                            foreach ($_POST['staff'] as $staff_id) {
-                                $query = "INSERT INTO service_staff (service_id, staff_id) VALUES (:service_id, :staff_id)";
-                                $stmt = $db->prepare($query);
-                                $stmt->bindParam(":service_id", $service_id);
-                                $stmt->bindParam(":staff_id", $staff_id);
-                                $stmt->execute();
-                            }
-                        }
-                        
-                        $success_message = "השירות נוסף בהצלחה";
+                    // בדיקה אם הגענו למגבלת השירותים
+                    if ($service_limit['current_services'] >= $service_limit['max_services']) {
+                        $error_message = "הגעת למגבלת השירותים במסלול שלך. כדי להוסיף שירותים נוספים, יש לשדרג את המסלול.";
                     } else {
-                        $error_message = "אירעה שגיאה בהוספת השירות";
+                        // הוספת שירות חדש
+                        $query = "INSERT INTO services (tenant_id, name, category_id, description, duration, price, buffer_time_before, buffer_time_after, color, is_active) 
+                                VALUES (:tenant_id, :name, :category_id, :description, :duration, :price, :buffer_before, :buffer_after, :color, :is_active)";
+                        
+                        $stmt = $db->prepare($query);
+                        $stmt->bindParam(":tenant_id", $tenant_id);
+                        $stmt->bindParam(":name", $service_name);
+                        $stmt->bindParam(":category_id", $category_id);
+                        $stmt->bindParam(":description", $description);
+                        $stmt->bindParam(":duration", $duration);
+                        $stmt->bindParam(":price", $price);
+                        $stmt->bindParam(":buffer_before", $buffer_before);
+                        $stmt->bindParam(":buffer_after", $buffer_after);
+                        $stmt->bindParam(":color", $color);
+                        $stmt->bindParam(":is_active", $is_active);
+                        
+                        if ($stmt->execute()) {
+                            $service_id = $db->lastInsertId();
+                            
+                            // אם יש אנשי צוות לשייך
+                            if (isset($_POST['staff']) && is_array($_POST['staff'])) {
+                                foreach ($_POST['staff'] as $staff_id) {
+                                    $query = "INSERT INTO service_staff (service_id, staff_id) VALUES (:service_id, :staff_id)";
+                                    $stmt = $db->prepare($query);
+                                    $stmt->bindParam(":service_id", $service_id);
+                                    $stmt->bindParam(":staff_id", $staff_id);
+                                    $stmt->execute();
+                                }
+                            }
+                            
+                            $success_message = "השירות נוסף בהצלחה";
+                        } else {
+                            $error_message = "אירעה שגיאה בהוספת השירות";
+                        }
                     }
                 }
             } catch (PDOException $e) {
@@ -240,17 +330,25 @@ $page_title = "ניהול שירותים";
     <div class="flex justify-between items-center mb-6">
     <h1 class="text-3xl font-bold text-gray-800">ניהול שירותים</h1>
     
-    <div class="flex">
-        <a href="service_categories.php" class="bg-secondary hover:bg-secondary-dark text-white font-bold py-2 px-4 rounded-xl ml-2">
-            <i class="fas fa-tags mr-1"></i> ניהול קטגוריות
-        </a>
+    <div class="flex items-center">
+        <div class="ml-4 text-sm">
+            <span class="font-semibold">מסלול נוכחי:</span>
+            <span class="text-primary"><?php echo htmlspecialchars($subscription_data['name']); ?></span>
+            <br>
+            <span class="font-semibold">מגבלת שירותים:</span>
+            <span class="<?php echo ($service_limit['current_services'] >= $service_limit['max_services']) ? 'text-red-500' : 'text-green-500'; ?>">
+                <?php echo $service_limit['current_services']; ?> / <?php echo $service_limit['max_services']; ?>
+            </span>
+            <?php if ($service_limit['current_services'] >= $service_limit['max_services']): ?>
+                <br>
+                <a href="settings.php#subscription" class="text-primary hover:text-primary-dark font-semibold">
+                    <i class="fas fa-arrow-circle-up ml-1"></i> שדרג את המסלול שלך
+                </a>
+            <?php endif; ?>
+        </div>
         
-        <a href="service_order.php" class="bg-secondary hover:bg-secondary-dark text-white font-bold py-2 px-4 rounded-xl ml-2">
-            <i class="fas fa-sort mr-1"></i> סדר תצוגה
-        </a>
-        
-        <button type="button" class="bg-primary hover:bg-primary-dark text-white font-bold py-2 px-4 rounded-xl ml-2" onclick="openAddModal()">
-            <i class="fas fa-plus mr-1"></i> הוסף שירות
+        <button type="button" class="bg-primary hover:bg-primary-dark text-white font-bold py-2 px-4 rounded-xl transition duration-300" onclick="openAddModal()" <?php echo ($service_limit['current_services'] >= $service_limit['max_services']) ? 'disabled' : ''; ?>>
+            <i class="fas fa-plus ml-1"></i> הוסף שירות
         </button>
     </div>
 </div>

@@ -86,6 +86,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         // קבלת ה-ID של המשתמש שנוצר
                         $tenant_id = $db->lastInsertId();
                         
+                        // הוספת המשתמש למסלול הבסיסי
+                        $query = "INSERT INTO tenant_subscriptions (tenant_id, subscription_id) 
+                                 SELECT :tenant_id, id FROM subscriptions WHERE name = 'מסלול בסיסי'";
+                        $stmt = $db->prepare($query);
+                        $stmt->bindParam(":tenant_id", $tenant_id);
+                        $stmt->execute();
+                        
                         // יצירת הגדרות ברירת מחדל לעסק
                         // שעות פעילות ברירת מחדל
                         $default_hours = [

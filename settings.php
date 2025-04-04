@@ -378,6 +378,50 @@ try {
     $error_message = "שגיאת מסד נתונים: " . $e->getMessage();
 }
 
+// שליפת פרטי המסלול הנוכחי
+$query = "SELECT s.*, COUNT(st.staff_id) as current_staff_count 
+         FROM subscriptions s 
+         JOIN tenant_subscriptions ts ON ts.subscription_id = s.id
+         LEFT JOIN staff st ON st.tenant_id = :tenant_id1 
+         WHERE ts.tenant_id = :tenant_id2 
+         GROUP BY s.id, s.max_staff_members";
+$stmt = $db->prepare($query);
+$stmt->bindParam(":tenant_id1", $tenant_id);
+$stmt->bindParam(":tenant_id2", $tenant_id);
+$stmt->execute();
+$current_subscription = $stmt->fetch();
+
+if (!$current_subscription) {
+    // אם אין מסלול פעיל, נקבל את המסלול הבסיסי
+    $query = "SELECT * FROM subscriptions WHERE name = 'מסלול בסיסי'";
+    $stmt = $db->prepare($query);
+    $stmt->execute();
+    $current_subscription = $stmt->fetch();
+
+    if ($current_subscription) {
+        // הוספת המסלול הבסיסי לדייר
+        $query = "INSERT INTO tenant_subscriptions (tenant_id, subscription_id) VALUES (:tenant_id, :subscription_id)";
+        $stmt = $db->prepare($query);
+        $stmt->bindParam(":tenant_id", $tenant_id);
+        $stmt->bindParam(":subscription_id", $current_subscription['id']);
+        $stmt->execute();
+
+        // שליפת מספר אנשי הצוות הנוכחי
+        $query = "SELECT COUNT(*) as current_staff_count FROM staff WHERE tenant_id = :tenant_id";
+        $stmt = $db->prepare($query);
+        $stmt->bindParam(":tenant_id", $tenant_id);
+        $stmt->execute();
+        $staff_count = $stmt->fetch();
+        $current_subscription['current_staff_count'] = $staff_count['current_staff_count'];
+    }
+}
+
+// שליפת כל המסלולים האפשריים
+$query = "SELECT * FROM subscriptions ORDER BY price ASC";
+$stmt = $db->prepare($query);
+$stmt->execute();
+$all_subscriptions = $stmt->fetchAll();
+
 // כותרת העמוד
 $page_title = "הגדרות";
 ?>
@@ -404,29 +448,29 @@ $page_title = "הגדרות";
         
         <div class="bg-white shadow-sm rounded-2xl overflow-hidden">
             <!-- Tabs -->
-            <div class="border-b">
-                <ul class="flex flex-wrap -mb-px">
-                    <li class="ml-4">
-                        <a href="?tab=general" class="inline-block py-4 px-4 text-sm font-medium <?php echo $current_tab == 'general' ? 'text-primary border-b-2 border-primary' : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300'; ?>">
-                            פרטי העסק
-                        </a>
-                    </li>
-                    <li class="ml-4">
-                        <a href="?tab=images" class="inline-block py-4 px-4 text-sm font-medium <?php echo $current_tab == 'images' ? 'text-primary border-b-2 border-primary' : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300'; ?>">
-                            תמונות
-                        </a>
-                    </li>
-                    <li class="ml-4">
-                        <a href="?tab=password" class="inline-block py-4 px-4 text-sm font-medium <?php echo $current_tab == 'password' ? 'text-primary border-b-2 border-primary' : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300'; ?>">
-                            סיסמה
-                        </a>
-                    </li>
-                    <li class="ml-4">
-                        <a href="?tab=templates" class="inline-block py-4 px-4 text-sm font-medium <?php echo $current_tab == 'templates' ? 'text-primary border-b-2 border-primary' : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300'; ?>">
-                            תבניות הודעה
-                        </a>
-                    </li>
-                </ul>
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex" aria-label="Tabs">
+                    <a href="?tab=general" 
+                       class="<?php echo $current_tab == 'general' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'; ?> whitespace-nowrap py-4 px-8 border-b-2 font-medium text-sm">
+                        פרטי העסק
+                    </a>
+                    <a href="?tab=images" 
+                       class="<?php echo $current_tab == 'images' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'; ?> whitespace-nowrap py-4 px-8 border-b-2 font-medium text-sm">
+                        תמונות
+                    </a>
+                    <a href="?tab=password" 
+                       class="<?php echo $current_tab == 'password' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'; ?> whitespace-nowrap py-4 px-8 border-b-2 font-medium text-sm">
+                        סיסמה
+                    </a>
+                    <a href="?tab=subscription" 
+                       class="<?php echo $current_tab == 'subscription' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'; ?> whitespace-nowrap py-4 px-8 border-b-2 font-medium text-sm">
+                        מסלול
+                    </a>
+                    <a href="?tab=templates" 
+                       class="<?php echo $current_tab == 'templates' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'; ?> whitespace-nowrap py-4 px-8 border-b-2 font-medium text-sm">
+                        תבניות הודעה
+                    </a>
+                </nav>
             </div>
             
             <!-- Tab Content -->
@@ -606,8 +650,110 @@ $page_title = "הגדרות";
                         </div>
                     </form>
                 
+                <?php elseif ($current_tab == 'subscription'): ?>
+                    <!-- תוכן טאב מסלול -->
+                    <div class="bg-white">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-6">המסלול שלך</h2>
+                        
+                        <?php
+                        // שליפת פרטי המסלול הנוכחי
+                        $query = "SELECT s.*, COUNT(st.staff_id) as current_staff_count 
+                                 FROM subscriptions s 
+                                 JOIN tenant_subscriptions ts ON ts.subscription_id = s.id
+                                 LEFT JOIN staff st ON st.tenant_id = :tenant_id1 
+                                 WHERE ts.tenant_id = :tenant_id2 
+                                 GROUP BY s.id, s.max_staff_members";
+                        $stmt = $db->prepare($query);
+                        $stmt->bindParam(":tenant_id1", $tenant_id);
+                        $stmt->bindParam(":tenant_id2", $tenant_id);
+                        $stmt->execute();
+                        $current_subscription = $stmt->fetch();
+
+                        if (!$current_subscription) {
+                            // אם אין מסלול פעיל, נקבל את המסלול הבסיסי
+                            $query = "SELECT * FROM subscriptions WHERE name = 'מסלול בסיסי'";
+                            $stmt = $db->prepare($query);
+                            $stmt->execute();
+                            $current_subscription = $stmt->fetch();
+
+                            if ($current_subscription) {
+                                // הוספת המסלול הבסיסי לדייר
+                                $query = "INSERT INTO tenant_subscriptions (tenant_id, subscription_id) VALUES (:tenant_id, :subscription_id)";
+                                $stmt = $db->prepare($query);
+                                $stmt->bindParam(":tenant_id", $tenant_id);
+                                $stmt->bindParam(":subscription_id", $current_subscription['id']);
+                                $stmt->execute();
+
+                                // שליפת מספר אנשי הצוות הנוכחי
+                                $query = "SELECT COUNT(*) as current_staff_count FROM staff WHERE tenant_id = :tenant_id";
+                                $stmt = $db->prepare($query);
+                                $stmt->bindParam(":tenant_id", $tenant_id);
+                                $stmt->execute();
+                                $staff_count = $stmt->fetch();
+                                $current_subscription['current_staff_count'] = $staff_count['current_staff_count'];
+                            }
+                        }
+                        
+                        // שליפת כל המסלולים האפשריים
+                        $query = "SELECT * FROM subscriptions ORDER BY price ASC";
+                        $stmt = $db->prepare($query);
+                        $stmt->execute();
+                        $all_subscriptions = $stmt->fetchAll();
+                        ?>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <?php foreach ($all_subscriptions as $subscription): ?>
+                                <div class="border rounded-xl p-6 <?php echo ($current_subscription && $subscription['id'] == $current_subscription['id']) ? 'border-primary bg-primary bg-opacity-5' : 'border-gray-200'; ?>">
+                                    <h3 class="text-xl font-bold mb-2"><?php echo htmlspecialchars($subscription['name']); ?></h3>
+                                    <div class="text-3xl font-bold mb-4">
+                                        ₪<?php echo number_format($subscription['price'], 2); ?>
+                                        <span class="text-sm font-normal text-gray-500">/ חודש</span>
+                                    </div>
+                                    
+                                    <ul class="mb-6 space-y-2">
+                                        <li class="flex items-center">
+                                            <i class="fas fa-users text-primary ml-2"></i>
+                                            עד <?php echo $subscription['max_staff_members']; ?> אנשי צוות
+                                            <?php if ($current_subscription && $subscription['id'] == $current_subscription['id']): ?>
+                                                <span class="text-sm text-gray-500 mr-2">(<?php echo $current_subscription['current_staff_count']; ?> בשימוש)</span>
+                                            <?php endif; ?>
+                                        </li>
+                                        <?php 
+                                        $features = json_decode($subscription['features'], true);
+                                        if (isset($features['features'])):
+                                            foreach ($features['features'] as $feature): 
+                                        ?>
+                                            <li class="flex items-center">
+                                                <i class="fas fa-check text-primary ml-2"></i>
+                                                <?php echo htmlspecialchars($feature); ?>
+                                            </li>
+                                        <?php 
+                                            endforeach;
+                                        endif;
+                                        ?>
+                                    </ul>
+                                    
+                                    <?php if ($current_subscription && $subscription['id'] == $current_subscription['id']): ?>
+                                        <button class="w-full bg-primary text-white font-bold py-2 px-4 rounded-xl opacity-50 cursor-not-allowed">
+                                            המסלול הנוכחי שלך
+                                        </button>
+                                    <?php elseif ($current_subscription && $subscription['price'] > $current_subscription['price']): ?>
+                                        <button class="w-full bg-primary hover:bg-primary-dark text-white font-bold py-2 px-4 rounded-xl transition duration-300" 
+                                                onclick="upgradeSubscription(<?php echo $subscription['id']; ?>)">
+                                            שדרג למסלול זה
+                                        </button>
+                                    <?php else: ?>
+                                        <button class="w-full bg-secondary hover:bg-secondary-dark text-white font-bold py-2 px-4 rounded-xl transition duration-300" 
+                                                onclick="changeSubscription(<?php echo $subscription['id']; ?>)">
+                                            שנה למסלול זה
+                                        </button>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+
                 <?php elseif ($current_tab == 'templates'): ?>
-                    <!-- Message Templates Tab -->
+                    <!-- תוכן טאב תבניות הודעה -->
                     <form method="POST" action="settings.php?tab=templates">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <!-- Booking Confirmation Template -->
@@ -685,41 +831,69 @@ $page_title = "הגדרות";
 </main>
 
 <script>
-    // תצוגה מקדימה של תמונות בעת בחירתן
-    document.addEventListener('DOMContentLoaded', function() {
-        const logoInput = document.getElementById('logo');
-        const coverInput = document.getElementById('cover_image');
-        
-        if (logoInput) {
-            logoInput.addEventListener('change', function() {
-                if (this.files && this.files[0]) {
-                    const reader = new FileReader();
-                    
-                    reader.onload = function(e) {
-                        const logoPreview = logoInput.parentElement.parentElement.previousElementSibling;
-                        logoPreview.innerHTML = `<img src="${e.target.result}" alt="תצוגה מקדימה של לוגו" class="w-32 h-32 object-cover border-2 border-gray-200 rounded-full">`;
-                    };
-                    
-                    reader.readAsDataURL(this.files[0]);
-                }
-            });
+function upgradeSubscription(subscriptionId) {
+    if (confirm('האם אתה בטוח שברצונך לשדרג למסלול זה?')) {
+        changeSubscription(subscriptionId);
+    }
+}
+
+function changeSubscription(subscriptionId) {
+    fetch('api/change_subscription.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'subscription_id=' + subscriptionId
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.message || 'אירעה שגיאה בשינוי המסלול');
         }
-        
-        if (coverInput) {
-            coverInput.addEventListener('change', function() {
-                if (this.files && this.files[0]) {
-                    const reader = new FileReader();
-                    
-                    reader.onload = function(e) {
-                        const coverPreview = coverInput.parentElement.parentElement.previousElementSibling;
-                        coverPreview.innerHTML = `<img src="${e.target.result}" alt="תצוגה מקדימה של תמונת רקע" class="w-full h-full object-cover">`;
-                    };
-                    
-                    reader.readAsDataURL(this.files[0]);
-                }
-            });
-        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('אירעה שגיאה בשינוי המסלול');
     });
+}
+
+// תצוגה מקדימה של תמונות בעת בחירתן
+document.addEventListener('DOMContentLoaded', function() {
+    const logoInput = document.getElementById('logo');
+    const coverInput = document.getElementById('cover_image');
+    
+    if (logoInput) {
+        logoInput.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const logoPreview = logoInput.parentElement.parentElement.previousElementSibling;
+                    logoPreview.innerHTML = `<img src="${e.target.result}" alt="תצוגה מקדימה של לוגו" class="w-32 h-32 object-cover border-2 border-gray-200 rounded-full">`;
+                };
+                
+                reader.readAsDataURL(this.files[0]);
+            }
+        });
+    }
+    
+    if (coverInput) {
+        coverInput.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const coverPreview = coverInput.parentElement.parentElement.previousElementSibling;
+                    coverPreview.innerHTML = `<img src="${e.target.result}" alt="תצוגה מקדימה של תמונת רקע" class="w-full h-full object-cover">`;
+                };
+                
+                reader.readAsDataURL(this.files[0]);
+            }
+        });
+    }
+});
 </script>
 
 <?php include_once "includes/footer.php"; ?>

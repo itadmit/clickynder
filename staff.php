@@ -36,78 +36,130 @@ if (isset($_POST['add_staff'])) {
         $error_message = "שם איש הצוות הוא שדה חובה";
     } else {
         try {
-            // הוספת איש הצוות
-            $query = "INSERT INTO staff (tenant_id, name, email, phone, position, bio, is_active) 
-                      VALUES (:tenant_id, :name, :email, :phone, :position, :bio, 1)";
-            
+            // בדיקת מגבלת אנשי צוות לפי המסלול
+            $query = "SELECT s.*, COUNT(st.staff_id) as current_staff_count 
+                     FROM subscriptions s 
+                     JOIN tenant_subscriptions ts ON ts.subscription_id = s.id
+                     LEFT JOIN staff st ON st.tenant_id = :tenant_id1 
+                     WHERE ts.tenant_id = :tenant_id2 
+                     GROUP BY s.id, s.max_staff_members";
             $stmt = $db->prepare($query);
-            $stmt->bindParam(":tenant_id", $tenant_id);
-            $stmt->bindParam(":name", $name);
-            $stmt->bindParam(":email", $email);
-            $stmt->bindParam(":phone", $phone);
-            $stmt->bindParam(":position", $position);
-            $stmt->bindParam(":bio", $bio);
+            $stmt->bindParam(":tenant_id1", $tenant_id);
+            $stmt->bindParam(":tenant_id2", $tenant_id);
+            $stmt->execute();
+            $subscription_data = $stmt->fetch();
             
-            if ($stmt->execute()) {
-                $staff_id = $db->lastInsertId();
-                
-                // טיפול בתמונה אם הועלתה
-                if (isset($_FILES['image']) && $_FILES['image']['error'] == 0) {
-                    $image_path = processUploadedImage('image', 'staff', $staff_id, $tenant_id);
-                    
-                    if ($image_path) {
-                        // עדכון נתיב התמונה במסד הנתונים
-                        $query = "UPDATE staff SET image_path = :image_path WHERE staff_id = :staff_id";
-                        $stmt = $db->prepare($query);
-                        $stmt->bindParam(":image_path", $image_path);
-                        $stmt->bindParam(":staff_id", $staff_id);
-                        $stmt->execute();
-                    }
-                }
-                
-                // שיוך כל השירותים הפעילים לאיש הצוות החדש
-                $query = "SELECT service_id FROM services WHERE tenant_id = :tenant_id AND is_active = 1";
+            if (!$subscription_data) {
+                // אם אין מסלול פעיל, נציג את המסלול הבסיסי
+                $query = "SELECT * FROM subscriptions WHERE name = 'מסלול בסיסי'";
                 $stmt = $db->prepare($query);
-                $stmt->bindParam(":tenant_id", $tenant_id);
                 $stmt->execute();
-                $services = $stmt->fetchAll();
+                $subscription_data = $stmt->fetch();
                 
-                if (!empty($services)) {
-                    $query = "INSERT INTO service_staff (service_id, staff_id) VALUES (:service_id, :staff_id)";
+                if ($subscription_data) {
+                    // הוספת המסלול הבסיסי ל-tenant_subscriptions
+                    $query = "INSERT INTO tenant_subscriptions (tenant_id, subscription_id) VALUES (:tenant_id, :subscription_id)";
                     $stmt = $db->prepare($query);
-                    $stmt->bindParam(":staff_id", $staff_id);
+                    $stmt->bindParam(":tenant_id", $tenant_id);
+                    $stmt->bindParam(":subscription_id", $subscription_data['id']);
+                    $stmt->execute();
                     
-                    foreach ($services as $service) {
-                        $stmt->bindParam(":service_id", $service['service_id']);
-                        $stmt->execute();
-                    }
-                }
-                
-                // הוספת שעות זמינות ברירת מחדל (כמו שעות העסק)
-                $query = "SELECT * FROM business_hours WHERE tenant_id = :tenant_id ORDER BY day_of_week ASC";
-                $stmt = $db->prepare($query);
-                $stmt->bindParam(":tenant_id", $tenant_id);
-                $stmt->execute();
-                $business_hours = $stmt->fetchAll();
-                
-                if (!empty($business_hours)) {
-                    $query = "INSERT INTO staff_availability (staff_id, day_of_week, is_available, start_time, end_time) 
-                             VALUES (:staff_id, :day_of_week, :is_available, :start_time, :end_time)";
+                    // שליפת מספר אנשי הצוות הנוכחי
+                    $query = "SELECT COUNT(*) as current_staff_count FROM staff WHERE tenant_id = :tenant_id";
                     $stmt = $db->prepare($query);
-                    $stmt->bindParam(":staff_id", $staff_id);
-                    
-                    foreach ($business_hours as $hours) {
-                        $stmt->bindParam(":day_of_week", $hours['day_of_week']);
-                        $stmt->bindParam(":is_available", $hours['is_open']);
-                        $stmt->bindParam(":start_time", $hours['open_time']);
-                        $stmt->bindParam(":end_time", $hours['close_time']);
-                        $stmt->execute();
-                    }
+                    $stmt->bindParam(":tenant_id", $tenant_id);
+                    $stmt->execute();
+                    $staff_count = $stmt->fetch();
+                    $subscription_data['current_staff_count'] = $staff_count['current_staff_count'];
+                } else {
+                    // אם אין אפילו מסלול בסיסי, נציג הודעת שגיאה
+                    echo '<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6" role="alert">
+                            לא נמצא מסלול פעיל. אנא צור קשר עם התמיכה.
+                          </div>';
+                    $subscription_data = [
+                        'name' => 'לא זמין',
+                        'current_staff_count' => 0,
+                        'max_staff_members' => 0
+                    ];
                 }
-                
-                $success_message = "איש הצוות נוסף בהצלחה";
+            }
+            
+            if ($subscription_data && $subscription_data['current_staff_count'] >= $subscription_data['max_staff_members']) {
+                $error_message = "הגעת למגבלת אנשי הצוות במסלול שלך. כדי להוסיף אנשי צוות נוספים, יש לשדרג את המסלול.";
             } else {
-                $error_message = "שגיאה בהוספת איש הצוות";
+                // הוספת איש הצוות
+                $query = "INSERT INTO staff (tenant_id, name, email, phone, position, bio, is_active) 
+                         VALUES (:tenant_id, :name, :email, :phone, :position, :bio, 1)";
+                
+                $stmt = $db->prepare($query);
+                $stmt->bindParam(":tenant_id", $tenant_id);
+                $stmt->bindParam(":name", $name);
+                $stmt->bindParam(":email", $email);
+                $stmt->bindParam(":phone", $phone);
+                $stmt->bindParam(":position", $position);
+                $stmt->bindParam(":bio", $bio);
+                
+                if ($stmt->execute()) {
+                    $staff_id = $db->lastInsertId();
+                    
+                    // טיפול בתמונה אם הועלתה
+                    if (isset($_FILES['image']) && $_FILES['image']['error'] == 0) {
+                        $image_path = processUploadedImage('image', 'staff', $staff_id, $tenant_id);
+                        
+                        if ($image_path) {
+                            // עדכון נתיב התמונה במסד הנתונים
+                            $query = "UPDATE staff SET image_path = :image_path WHERE staff_id = :staff_id";
+                            $stmt = $db->prepare($query);
+                            $stmt->bindParam(":image_path", $image_path);
+                            $stmt->bindParam(":staff_id", $staff_id);
+                            $stmt->execute();
+                        }
+                    }
+                    
+                    // שיוך כל השירותים הפעילים לאיש הצוות החדש
+                    $query = "SELECT service_id FROM services WHERE tenant_id = :tenant_id AND is_active = 1";
+                    $stmt = $db->prepare($query);
+                    $stmt->bindParam(":tenant_id", $tenant_id);
+                    $stmt->execute();
+                    $services = $stmt->fetchAll();
+                    
+                    if (!empty($services)) {
+                        $query = "INSERT INTO service_staff (service_id, staff_id) VALUES (:service_id, :staff_id)";
+                        $stmt = $db->prepare($query);
+                        $stmt->bindParam(":staff_id", $staff_id);
+                        
+                        foreach ($services as $service) {
+                            $stmt->bindParam(":service_id", $service['service_id']);
+                            $stmt->execute();
+                        }
+                    }
+                    
+                    // הוספת שעות זמינות ברירת מחדל (כמו שעות העסק)
+                    $query = "SELECT * FROM business_hours WHERE tenant_id = :tenant_id ORDER BY day_of_week ASC";
+                    $stmt = $db->prepare($query);
+                    $stmt->bindParam(":tenant_id", $tenant_id);
+                    $stmt->execute();
+                    $business_hours = $stmt->fetchAll();
+                    
+                    if (!empty($business_hours)) {
+                        $query = "INSERT INTO staff_availability (staff_id, day_of_week, is_available, start_time, end_time) 
+                                 VALUES (:staff_id, :day_of_week, :is_available, :start_time, :end_time)";
+                        $stmt = $db->prepare($query);
+                        $stmt->bindParam(":staff_id", $staff_id);
+                        
+                        foreach ($business_hours as $hours) {
+                            $stmt->bindParam(":day_of_week", $hours['day_of_week']);
+                            $stmt->bindParam(":is_available", $hours['is_open']);
+                            $stmt->bindParam(":start_time", $hours['open_time']);
+                            $stmt->bindParam(":end_time", $hours['close_time']);
+                            $stmt->execute();
+                        }
+                    }
+                    
+                    $success_message = "איש הצוות נוסף בהצלחה";
+                } else {
+                    $error_message = "שגיאה בהוספת איש הצוות";
+                }
             }
         } catch (PDOException $e) {
             $error_message = "שגיאת מסד נתונים: " . $e->getMessage();
@@ -269,14 +321,81 @@ function processUploadedImage($file_key, $type, $id, $tenant_id) {
 
 <!-- Main Content -->
 <main class="flex-1 overflow-y-auto py-8">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center mb-6">
             <h1 class="text-3xl font-bold text-gray-800">ניהול צוות</h1>
             
-            <button id="add-staff-btn" class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-xl flex items-center">
-                <i class="fas fa-plus mr-2"></i>
-                <span>הוסף איש צוות</span>
-            </button>
+            <?php
+            // שליפת פרטי המסלול הנוכחי
+            $query = "SELECT s.*, COUNT(st.staff_id) as current_staff_count 
+                     FROM subscriptions s 
+                     JOIN tenant_subscriptions ts ON ts.subscription_id = s.id
+                     LEFT JOIN staff st ON st.tenant_id = :tenant_id1 
+                     WHERE ts.tenant_id = :tenant_id2 
+                     GROUP BY s.id, s.max_staff_members";
+            $stmt = $db->prepare($query);
+            $stmt->bindParam(":tenant_id1", $tenant_id);
+            $stmt->bindParam(":tenant_id2", $tenant_id);
+            $stmt->execute();
+            $subscription_data = $stmt->fetch();
+            
+            if (!$subscription_data) {
+                // אם אין מסלול פעיל, נציג את המסלול הבסיסי
+                $query = "SELECT * FROM subscriptions WHERE name = 'מסלול בסיסי'";
+                $stmt = $db->prepare($query);
+                $stmt->execute();
+                $subscription_data = $stmt->fetch();
+                
+                if ($subscription_data) {
+                    // הוספת המסלול הבסיסי ל-tenant_subscriptions
+                    $query = "INSERT INTO tenant_subscriptions (tenant_id, subscription_id) VALUES (:tenant_id, :subscription_id)";
+                    $stmt = $db->prepare($query);
+                    $stmt->bindParam(":tenant_id", $tenant_id);
+                    $stmt->bindParam(":subscription_id", $subscription_data['id']);
+                    $stmt->execute();
+                    
+                    // שליפת מספר אנשי הצוות הנוכחי
+                    $query = "SELECT COUNT(*) as current_staff_count FROM staff WHERE tenant_id = :tenant_id";
+                    $stmt = $db->prepare($query);
+                    $stmt->bindParam(":tenant_id", $tenant_id);
+                    $stmt->execute();
+                    $staff_count = $stmt->fetch();
+                    $subscription_data['current_staff_count'] = $staff_count['current_staff_count'];
+                } else {
+                    // אם אין אפילו מסלול בסיסי, נציג הודעת שגיאה
+                    echo '<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6" role="alert">
+                            לא נמצא מסלול פעיל. אנא צור קשר עם התמיכה.
+                          </div>';
+                    $subscription_data = [
+                        'name' => 'לא זמין',
+                        'current_staff_count' => 0,
+                        'max_staff_members' => 0
+                    ];
+                }
+            }
+            ?>
+            
+            <div class="flex items-center">
+                <div class="ml-4 text-sm">
+                    <span class="font-semibold">מסלול נוכחי:</span>
+                    <span class="text-primary"><?php echo htmlspecialchars($subscription_data['name']); ?></span>
+                    <br>
+                    <span class="font-semibold">מגבלת אנשי צוות:</span>
+                    <span class="<?php echo ($subscription_data['current_staff_count'] >= $subscription_data['max_staff_members']) ? 'text-red-500' : 'text-green-500'; ?>">
+                        <?php echo $subscription_data['current_staff_count']; ?> / <?php echo $subscription_data['max_staff_members']; ?>
+                    </span>
+                    <?php if ($subscription_data['current_staff_count'] >= $subscription_data['max_staff_members']): ?>
+                        <br>
+                        <a href="settings.php#subscription" class="text-primary hover:text-primary-dark font-semibold">
+                            <i class="fas fa-arrow-circle-up mr-1"></i> שדרג את המסלול שלך
+                        </a>
+                    <?php endif; ?>
+                </div>
+                
+                <button type="button" class="bg-primary hover:bg-primary-dark text-white font-bold py-2 px-4 rounded-xl transition duration-300" onclick="openAddModal()" <?php echo ($subscription_data['current_staff_count'] >= $subscription_data['max_staff_members']) ? 'disabled' : ''; ?>>
+                    <i class="fas fa-user-plus mr-1"></i> הוסף איש צוות
+                </button>
+            </div>
         </div>
         
         <?php if (!empty($error_message)): ?>
@@ -374,21 +493,14 @@ function processUploadedImage($file_key, $type, $id, $tenant_id) {
                                 </a>
                                 
                                 <div class="flex space-x-2 space-x-reverse">
-                                    <button class="edit-staff-btn text-blue-500 hover:text-blue-700" 
-                                            data-id="<?php echo $staff['staff_id']; ?>"
-                                            data-name="<?php echo htmlspecialchars($staff['name']); ?>"
-                                            data-email="<?php echo htmlspecialchars($staff['email']); ?>"
-                                            data-phone="<?php echo htmlspecialchars($staff['phone']); ?>"
-                                            data-position="<?php echo htmlspecialchars($staff['position']); ?>"
-                                            data-bio="<?php echo htmlspecialchars($staff['bio']); ?>"
-                                            data-active="<?php echo $staff['is_active']; ?>">
-                                        <i class="fas fa-edit"></i>
+                                    <button onclick="openEditModal(<?php echo $staff['staff_id']; ?>)" class="bg-secondary hover:bg-secondary-dark text-white font-bold py-2 px-4 rounded-xl transition duration-300">
+                                        <i class="fas fa-edit ml-2"></i>
+                                        ערוך
                                     </button>
                                     
-                                    <button class="delete-staff-btn text-red-500 hover:text-red-700" 
-                                            data-id="<?php echo $staff['staff_id']; ?>"
-                                            data-name="<?php echo htmlspecialchars($staff['name']); ?>">
-                                        <i class="fas fa-trash-alt"></i>
+                                    <button onclick="openDeleteModal(<?php echo $staff['staff_id']; ?>)" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-xl transition duration-300">
+                                        <i class="fas fa-trash ml-2"></i>
+                                        מחק
                                     </button>
                                 </div>
                             </div>
@@ -463,7 +575,7 @@ function processUploadedImage($file_key, $type, $id, $tenant_id) {
                 </div>
                 
                 <div class="flex justify-end space-x-3 space-x-reverse pt-4">
-                    <button type="button" id="cancel-staff" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg">
+                    <button type="button" id="cancel-staff" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg" onclick="closeAddModal()">
                         ביטול
                     </button>
                     <button type="submit" id="submit-staff" class="px-4 py-2 bg-primary hover:bg-primary-dark text-white font-bold rounded-lg">
@@ -483,7 +595,7 @@ function processUploadedImage($file_key, $type, $id, $tenant_id) {
             
             <form method="POST" class="flex justify-end space-x-3 space-x-reverse">
                 <input type="hidden" id="delete_staff_id" name="staff_id">
-                <button type="button" id="cancel-delete" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg">
+                <button type="button" id="cancel-delete" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg" onclick="closeDeleteModal()">
                     ביטול
                 </button>
                 <button type="submit" name="delete_staff" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg">
@@ -495,144 +607,141 @@ function processUploadedImage($file_key, $type, $id, $tenant_id) {
 </main>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // פתיחת מודל להוספת איש צוות
-    const addStaffBtn = document.getElementById('add-staff-btn');
-    const noStaffAddBtn = document.getElementById('no-staff-add-btn');
-    const staffModal = document.getElementById('staff-modal');
-    const modalTitle = document.getElementById('modal-title');
+// פונקציה לפתיחת מודל הוספת עובד
+function openAddModal() {
+    // איפוס הטופס
     const staffForm = document.getElementById('staff-form');
-    const cancelStaffBtn = document.getElementById('cancel-staff');
-    const activeContainer = document.getElementById('active-container');
-    
-    function openAddStaffModal() {
-        modalTitle.textContent = 'הוספת איש צוות';
+    if (staffForm) {
         staffForm.reset();
-        document.getElementById('staff_id').value = '';
-        document.getElementById('image-preview').classList.add('hidden');
-        document.getElementById('image-text').textContent = 'לחץ להעלאת תמונה';
-        activeContainer.classList.add('hidden');
-        staffForm.action = '';
-        staffForm.removeAttribute('data-edit');
+    }
+    // הסרת כל הודעות השגיאה
+    const errorMessages = document.querySelectorAll('.error-message');
+    errorMessages.forEach(error => error.remove());
+    // פתיחת המודל
+    const staffModal = document.getElementById('staff-modal');
+    if (staffModal) {
         staffModal.classList.remove('hidden');
     }
-    
-    if (addStaffBtn) {
-        addStaffBtn.addEventListener('click', openAddStaffModal);
-    }
-    
-    if (noStaffAddBtn) {
-        noStaffAddBtn.addEventListener('click', openAddStaffModal);
-    }
-    
-    // סגירת מודל
-    cancelStaffBtn.addEventListener('click', function() {
+}
+
+// פונקציה לסגירת מודל הוספת עובד
+function closeAddModal() {
+    const staffModal = document.getElementById('staff-modal');
+    if (staffModal) {
         staffModal.classList.add('hidden');
-    });
-    
-    // טיפול בהעלאת תמונה - תצוגה מקדימה
-    const imageInput = document.getElementById('image');
-    const imagePreview = document.getElementById('image-preview');
-    const previewImg = document.getElementById('preview-img');
-    const imageText = document.getElementById('image-text');
-    
-    imageInput.addEventListener('change', function(e) {
-        if (e.target.files.length > 0) {
-            const file = e.target.files[0];
-            const reader = new FileReader();
-            
-            reader.onload = function(e) {
-                previewImg.src = e.target.result;
-                imagePreview.classList.remove('hidden');
-                imageText.textContent = file.name;
-            };
-            
-            reader.readAsDataURL(file);
-        }
-    });
-    
-    // פתיחת מודל לעריכת איש צוות
-    const editStaffBtns = document.querySelectorAll('.edit-staff-btn');
-    
-    editStaffBtns.forEach(btn => {
-        btn.addEventListener('click', function() {
-            const id = this.getAttribute('data-id');
-            const name = this.getAttribute('data-name');
-            const email = this.getAttribute('data-email');
-            const phone = this.getAttribute('data-phone');
-            const position = this.getAttribute('data-position');
-            const bio = this.getAttribute('data-bio');
-            const active = this.getAttribute('data-active');
-            
-            modalTitle.textContent = 'עריכת איש צוות';
-            
-            document.getElementById('staff_id').value = id;
-            document.getElementById('name').value = name;
-            document.getElementById('email').value = email;
-            document.getElementById('phone').value = phone;
-            document.getElementById('position').value = position;
-            document.getElementById('bio').value = bio;
-            document.getElementById('is_active').checked = (active === '1');
-            
-            document.getElementById('image-preview').classList.add('hidden');
-            document.getElementById('image-text').textContent = 'לחץ להעלאת תמונה';
-            
-            activeContainer.classList.remove('hidden');
-            
-            staffForm.setAttribute('data-edit', 'true');
-            staffModal.classList.remove('hidden');
-        });
-    });
-    
-    // שליחת טופס איש צוות
-    staffForm.addEventListener('submit', function(e) {
-        const isEdit = this.hasAttribute('data-edit');
-        
-        if (isEdit) {
-            this.action = ''; // השתמש ב-action ברירת מחדל של הטופס
-            this.querySelector('#submit-staff').name = 'update_staff';
-        } else {
-            this.action = ''; // השתמש ב-action ברירת מחדל של הטופס
-            this.querySelector('#submit-staff').name = 'add_staff';
-        }
-    });
-    
-    // פתיחת מודל למחיקת איש צוות
-    const deleteStaffBtns = document.querySelectorAll('.delete-staff-btn');
-    const deleteModal = document.getElementById('delete-modal');
-    const cancelDeleteBtn = document.getElementById('cancel-delete');
-    const deleteStaffName = document.getElementById('delete-staff-name');
+    }
+}
+
+// פונקציה לפתיחת מודל עריכת עובד
+function openEditModal(staffId) {
+    // איפוס הטופס
+    const staffForm = document.getElementById('staff-form');
+    if (staffForm) {
+        staffForm.reset();
+    }
+    // הסרת כל הודעות השגיאה
+    const errorMessages = document.querySelectorAll('.error-message');
+    errorMessages.forEach(error => error.remove());
+    // פתיחת המודל
+    const staffModal = document.getElementById('staff-modal');
+    if (staffModal) {
+        staffModal.classList.remove('hidden');
+    }
+    // שמירת ה-ID של העובד לעריכה
+    if (staffForm) {
+        staffForm.dataset.staffId = staffId;
+    }
+}
+
+// פונקציה לסגירת מודל עריכת עובד
+function closeEditModal() {
+    const staffModal = document.getElementById('staff-modal');
+    if (staffModal) {
+        staffModal.classList.add('hidden');
+    }
+}
+
+// פונקציה לפתיחת מודל מחיקת עובד
+function openDeleteModal(staffId) {
+    // שמירת ה-ID של העובד למחיקה
     const deleteStaffId = document.getElementById('delete_staff_id');
-    
-    deleteStaffBtns.forEach(btn => {
-        btn.addEventListener('click', function() {
-            const id = this.getAttribute('data-id');
-            const name = this.getAttribute('data-name');
-            
-            deleteStaffName.textContent = name;
-            deleteStaffId.value = id;
-            
-            deleteModal.classList.remove('hidden');
-        });
-    });
-    
-    // סגירת מודל מחיקה
-    cancelDeleteBtn.addEventListener('click', function() {
+    if (deleteStaffId) {
+        deleteStaffId.value = staffId;
+    }
+    // פתיחת המודל
+    const deleteModal = document.getElementById('delete-modal');
+    if (deleteModal) {
+        deleteModal.classList.remove('hidden');
+    }
+}
+
+// פונקציה לסגירת מודל מחיקת עובד
+function closeDeleteModal() {
+    const deleteModal = document.getElementById('delete-modal');
+    if (deleteModal) {
         deleteModal.classList.add('hidden');
-    });
-    
-    // סגירת מודלים בלחיצה על הרקע
-    staffModal.addEventListener('click', function(e) {
-        if (e.target === this) {
-            this.classList.add('hidden');
+    }
+}
+
+// סגירת מודלים בלחיצה מחוץ להם
+document.addEventListener('DOMContentLoaded', function() {
+    // סגירת מודל הוספה
+    const staffModal = document.getElementById('staff-modal');
+    if (staffModal) {
+        staffModal.addEventListener('click', function(e) {
+            if (e.target === staffModal) {
+                closeAddModal();
+            }
+        });
+    }
+
+    // סגירת מודל מחיקה
+    const deleteModal = document.getElementById('delete-modal');
+    if (deleteModal) {
+        deleteModal.addEventListener('click', function(e) {
+            if (e.target === deleteModal) {
+                closeDeleteModal();
+            }
+        });
+    }
+
+    // סגירת מודלים בלחיצת ESC
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            closeAddModal();
+            closeEditModal();
+            closeDeleteModal();
         }
     });
-    
-    deleteModal.addEventListener('click', function(e) {
-        if (e.target === this) {
-            this.classList.add('hidden');
-        }
-    });
+
+    // טיפול בהעלאת תמונה
+    const imageInput = document.getElementById('image');
+    if (imageInput) {
+        imageInput.addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const previewImg = document.getElementById('preview-img');
+                    const imagePreview = document.getElementById('image-preview');
+                    const imageText = document.getElementById('image-text');
+                    
+                    if (previewImg) {
+                        previewImg.src = e.target.result;
+                    }
+                    if (imagePreview) {
+                        imagePreview.classList.remove('hidden');
+                    }
+                    if (imageText) {
+                        imageText.textContent = file.name;
+                    }
+                };
+                
+                reader.readAsDataURL(file);
+            }
+        });
+    }
 });
 </script>
 
