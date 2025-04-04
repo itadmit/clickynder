@@ -124,3 +124,85 @@
 #waitlistModal.show {
     opacity: 1;
 }
+
+
+/**
+ * תוספות CSS לעיצוב רשימת המתנה - להוספה בסוף הקובץ booking.css
+ */
+
+/* עיצוב מודל רשימת המתנה */
+#waitlistModal {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+#waitlistModal.show {
+    opacity: 1;
+}
+
+/* עיצוב כפתורים */
+.waitlist-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.waitlist-button.primary {
+    background-color: #ec4899;
+    color: white;
+}
+
+.waitlist-button.primary:hover {
+    background-color: #db2777;
+}
+
+.waitlist-button.secondary {
+    background-color: #3b82f6;
+    color: white;
+}
+
+.waitlist-button.secondary:hover {
+    background-color: #2563eb;
+}
+
+/* הודעת הצלחה */
+.success-message {
+    animation: fadeIn 0.5s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* תצוגת רשימת המתנה */
+.waitlist-container {
+    background-color: #f9fafb;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    margin-top: 1rem;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.waitlist-container:hover {
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+}
+
+/* עיצוב מודל בתצוגות מובייל */
+@media (max-width: 640px) {
+    #waitlistModal .modal-content {
+        width: 95%;
+        max-width: 95%;
+        margin: 0 auto;
+        padding: 1rem;
+    }
+    
+    #waitlistModal .grid-cols-2 {
+        grid-template-columns: 1fr;
+    }
+}

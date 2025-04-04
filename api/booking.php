@@ -140,6 +140,20 @@ try {
         }
     }
     
+
+    // בדיקת תקינות התאריך עם checkdate
+$date_parts = explode('-', $appointment_date);
+if (count($date_parts) !== 3 || !checkdate($date_parts[1], $date_parts[2], $date_parts[0])) {
+    $error = [
+        'success' => false,
+        'message' => 'התאריך שנבחר אינו תקין'
+    ];
+    writeToLog("Invalid date", $error);
+    echo json_encode($error);
+    exit;
+}
+
+
     // יצירת datetime מלא לתחילת התור
     $start_datetime = $appointment_date . ' ' . $appointment_time . ':00';
     

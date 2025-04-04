@@ -1,0 +1,241 @@
+/**
+ * עיצוב לוח שנה בסגנון Calendly
+ * הוסף קובץ זה לתיקיית booking/assets/css
+ */
+
+/* מיכל ראשי לכל העמוד */
+.booking-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    font-family: 'Noto Sans Hebrew', sans-serif;
+}
+
+/* כותרות */
+.booking-title {
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+.booking-subtitle {
+    font-size: 1.2rem;
+    color: #6b7280;
+    margin-bottom: 2rem;
+}
+
+/* חלוקה לשני טורים בתצוגת דסקטופ */
+.booking-columns {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+@media (min-width: 768px) {
+    .booking-columns {
+        flex-direction: row;
+    }
+}
+
+/* עמודה שמאלית - פרטי השירות */
+.booking-info {
+    background-color: white;
+    padding: 2rem;
+    flex: 0 0 350px;
+    border-left: 1px solid #e5e7eb;
+}
+
+/* עמודה ימנית - בחירת תאריך ושעה */
+.booking-calendar {
+    background-color: white;
+    padding: 2rem;
+    flex: 1;
+}
+
+/* כותרת לוח השנה */
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.month-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.month-navigation {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.month-navigation button {
+    background-color: #f3f4f6;
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.month-navigation button:hover {
+    background-color: #e5e7eb;
+}
+
+/* עיצוב טבלת לוח השנה */
+.calendar-grid {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 8px;
+}
+
+.calendar-grid th {
+    text-align: center;
+    font-weight: 600;
+    padding: 8px 0;
+    font-size: 0.9rem;
+}
+
+.calendar-grid td {
+    text-align: center;
+    padding: 0;
+    height: 42px;
+    position: relative;
+}
+
+.calendar-day {
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    margin: 0 auto;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+    position: relative;
+}
+
+.calendar-day:hover:not(.day-disabled):not(.day-selected) {
+    background-color: #f3f4f6;
+}
+
+.day-today {
+    font-weight: bold;
+}
+
+.day-selected {
+    background-color: #ec4899;
+    color: white;
+    font-weight: bold;
+}
+
+.day-disabled {
+    color: #d1d5db;
+    cursor: default;
+}
+
+.day-has-slots:after {
+    content: "";
+    position: absolute;
+    width: 5px;
+    height: 5px;
+    background-color: #ec4899;
+    border-radius: 50%;
+    bottom: 3px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+/* עיצוב רשימת השעות */
+.time-slots-container {
+    margin-top: 2rem;
+}
+
+.time-slots-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.time-slots-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+}
+
+.time-slot {
+    height: 48px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 1rem;
+    background-color: white;
+}
+
+.time-slot:hover {
+    border-color: #ec4899;
+    background-color: #fdf2f8;
+    transform: translateY(-2px);
+}
+
+.time-slot.selected {
+    background-color: #ec4899;
+    color: white;
+    border-color: #ec4899;
+    font-weight: 500;
+}
+
+/* אזור הצג את היום הזה */
+.today-button {
+    padding: 8px 16px;
+    background-color: #f3f4f6;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.today-button:hover {
+    background-color: #e5e7eb;
+}
+
+/* תצוגת מובייל */
+@media (max-width: 767px) {
+    .booking-info {
+        padding: 1.5rem;
+    }
+    
+    .booking-calendar {
+        padding: 1.5rem;
+    }
+    
+    .calendar-grid {
+        border-spacing: 4px;
+    }
+    
+    .calendar-day {
+        width: 36px;
+        height: 36px;
+        font-size: 0.85rem;
+    }
+    
+    .time-slots-grid {
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    }
+}

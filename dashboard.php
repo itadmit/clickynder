@@ -154,6 +154,22 @@ $stmt->bindParam(":tenant_id", $tenant_id);
 $stmt->execute();
 $staff_stats = $stmt->fetchAll();
 
+// שליפת כמות הפריטים ברשימת ההמתנה
+$query = "
+    SELECT COUNT(*) as waitlist_count 
+    FROM waitlist 
+    WHERE tenant_id = :tenant_id AND status = 'waiting'
+";
+$stmt = $db->prepare($query);
+$stmt->bindParam(":tenant_id", $tenant_id);
+$stmt->execute();
+$waitlist_count = $stmt->fetch()['waitlist_count'];
+
+// הוספה לנתוני הדף
+$sample_data['waitlist_count'] = $waitlist_count;
+
+
+
 // כותרת העמוד
 $page_title = "לוח בקרה";
 ?>
@@ -184,6 +200,24 @@ $page_title = "לוח בקרה";
                 <a href="appointments.php?date=<?php echo $today; ?>" class="text-sm text-primary font-medium hover:underline block mt-2">צפה בכל התורים של היום</a>
             </div>
             
+            <!-- <div class="bg-white p-6 rounded-2xl shadow-sm">
+    <div class="flex justify-between items-start">
+        <div>
+            <p class="text-gray-500 text-sm mb-1">רשימת המתנה</p>
+            <h3 class="text-3xl font-bold"><?php echo $sample_data['waitlist_count']; ?></h3>
+        </div>
+        <div class="bg-pastel-orange p-3 rounded-xl">
+            <i class="fas fa-clipboard-list text-orange-600"></i>
+        </div>
+    </div>
+    <div class="mt-4">
+        <a href="waitlist.php" class="text-primary hover:underline flex items-center text-sm">
+            <span>צפה ברשימת המתנה</span>
+            <i class="fas fa-arrow-left mr-1"></i>
+        </a>
+    </div>
+</div> -->
+
             <!-- תורים לשבוע הקרוב -->
             <div class="bg-white p-6 rounded-2xl shadow-sm">
                 <div class="flex items-center">
@@ -366,6 +400,8 @@ $page_title = "לוח בקרה";
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
+
+                
                 
                 <!-- צוות -->
                 <h2 class="text-lg font-semibold mt-8 mb-4">ביצועי צוות</h2>

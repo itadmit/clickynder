@@ -63,7 +63,7 @@ if (!defined('ACCESS_ALLOWED') && basename($_SERVER['PHP_SELF']) == basename(__F
                     
                     <!-- Step 2: Date & Time Selection -->
                     <div id="step2" class="booking-step">
-                        <!-- אם יש מספר אנשי צוות, נציג בחירת איש צוות -->
+                        <!-- בחירת איש צוות - אם קיים -->
                         <?php if (count($staff) > 1): ?>
                         <div class="mb-6">
                             <label class="block text-gray-700 font-medium mb-2">בחר נותן שירות:</label>
@@ -85,22 +85,67 @@ if (!defined('ACCESS_ALLOWED') && basename($_SERVER['PHP_SELF']) == basename(__F
                         </div>
                         <?php endif; ?>
                         
-                        <div id="calendarContainer" class="mb-6">
-                            <!-- כאן יוצג לוח השנה -->
-                        </div>
-                        
-                        <div id="timeSlots" class="hidden border-t pt-4">
-                            <h3 class="text-lg font-semibold mb-4">בחר שעה ליום <span id="selectedDate"></span></h3>
-                            
-                            <div id="timeSlotsContainer" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2"></div>
-                            
-                            <div id="noTimeSlotsMessage" class="text-center py-8 hidden">
-                                <p class="text-gray-600">אין זמנים פנויים ביום זה. אנא בחר יום אחר.</p>
+                        <!-- מיכל בסגנון Calendly -->
+                        <div class="booking-columns">
+                            <!-- עמודה שמאלית - מידע על השירות -->
+                            <div class="booking-info">
+                                <h3 class="text-lg font-semibold mb-4">פרטי השירות</h3>
                                 
-                                <!-- אופציה להירשם לרשימת המתנה -->
-                                <button id="joinWaitlistBtn" class="mt-4 bg-secondary hover:bg-secondary-dark text-white font-bold py-2 px-6 rounded-xl transition duration-300">
-                                    הירשם לרשימת המתנה
-                                </button>
+                                <div class="space-y-4">
+                                    <div>
+                                        <div class="font-medium text-gray-600">שירות:</div>
+                                        <div id="service-details-name" class="text-lg font-semibold"></div>
+                                    </div>
+                                    
+                                    <div>
+                                        <div class="font-medium text-gray-600">משך:</div>
+                                        <div id="service-details-duration" class="flex items-center">
+                                            <i class="far fa-clock mr-1"></i>
+                                            <span></span>
+                                        </div>
+                                    </div>
+                                    
+                                    <?php if (count($staff) <= 1 && !empty($staff)): ?>
+                                    <div>
+                                        <div class="font-medium text-gray-600">נותן שירות:</div>
+                                        <div id="service-details-staff" class="flex items-center">
+                                            <?php if (!empty($staff[0]['image_path'])): ?>
+                                                <img src="<?php echo htmlspecialchars($staff[0]['image_path']); ?>" class="w-8 h-8 object-cover rounded-full mr-2">
+                                            <?php endif; ?>
+                                            <span><?php echo !empty($staff[0]) ? htmlspecialchars($staff[0]['name']) : ''; ?></span>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+                                    
+                                    <?php if (!empty($tenant['phone'])): ?>
+                                    <div class="mt-8 pt-4 border-t border-gray-200">
+                                        <div class="font-medium">צריך עזרה?</div>
+                                        <div class="text-sm">
+                                            <a href="tel:<?php echo htmlspecialchars($tenant['phone']); ?>" class="text-primary flex items-center mt-1">
+                                                <i class="fas fa-phone-alt mr-1"></i>
+                                                <?php echo htmlspecialchars($tenant['phone']); ?>
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            
+                            <!-- עמודה ימנית - בחירת תאריך ושעה -->
+                            <div class="booking-calendar">
+                                <h3 class="text-lg font-semibold mb-4">בחר תאריך ושעה</h3>
+                                
+                                <div id="calendarContainer" class="mb-6">
+                                    <!-- לוח השנה בסגנון Calendly יוצג כאן ע"י JavaScript -->
+                                </div>
+                                
+                                <div id="timeSlots" class="hidden">
+                                    <!-- רשימת השעות הפנויות תוצג כאן ע"י JavaScript -->
+                                </div>
+                                
+                                <div id="noTimeSlotsMessage" class="text-center py-4 hidden">
+                                    <p class="text-gray-600">אין זמנים פנויים ביום זה. אנא בחר יום אחר.</p>
+                                </div>
                             </div>
                         </div>
                         
@@ -346,62 +391,74 @@ if (!defined('ACCESS_ALLOWED') && basename($_SERVER['PHP_SELF']) == basename(__F
 
                     <!-- Waitlist Modal -->
                     <div id="waitlistModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
-                        <div class="bg-white rounded-2xl p-6 max-w-md w-full mx-4">
-                            <h3 class="text-xl font-bold mb-4">רשימת המתנה</h3>
-                            <p class="text-gray-600 mb-4">אין תורים פנויים כרגע. השאר פרטים ונעדכן אותך כשיתפנה תור.</p>
+                        <div class="bg-white rounded-2xl max-w-md w-full max-h-screen overflow-y-auto">
+                            <div class="flex justify-between items-center p-6 border-b">
+                                <h2 class="text-xl font-bold">הצטרפות לרשימת המתנה</h2>
+                                <button id="closeWaitlistModal" class="text-gray-500 hover:text-gray-700">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
                             
-                            <form id="waitlistForm" class="space-y-4">
-                                <input type="hidden" id="waitlist_service_id" name="service_id">
-                                <input type="hidden" id="waitlist_staff_id" name="staff_id">
-                                <input type="hidden" name="tenant_id" value="<?php echo $tenant_id; ?>">
-                                
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label for="waitlist_first_name" class="block text-gray-700 text-sm font-medium mb-1">שם פרטי *</label>
-                                        <input type="text" id="waitlist_first_name" name="first_name" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
+                            <div class="p-6">
+                                <form id="waitlistForm" class="space-y-4">
+                                    <input type="hidden" name="tenant_id" value="<?php echo $tenant_id; ?>">
+                                    <input type="hidden" id="waitlist_service_id" name="service_id" value="">
+                                    <input type="hidden" id="waitlist_staff_id" name="staff_id" value="">
+                                    
+                                    <!-- פרטי לקוח -->
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label for="waitlist_first_name" class="block text-gray-700 font-medium mb-2">שם פרטי *</label>
+                                            <input type="text" id="waitlist_first_name" name="first_name" class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-primary" required>
+                                        </div>
+                                        
+                                        <div>
+                                            <label for="waitlist_last_name" class="block text-gray-700 font-medium mb-2">שם משפחה *</label>
+                                            <input type="text" id="waitlist_last_name" name="last_name" class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-primary" required>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label for="waitlist_last_name" class="block text-gray-700 text-sm font-medium mb-1">שם משפחה *</label>
-                                        <input type="text" id="waitlist_last_name" name="last_name" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
+                                    
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label for="waitlist_phone" class="block text-gray-700 font-medium mb-2">טלפון *</label>
+                                            <input type="tel" id="waitlist_phone" name="phone" dir="ltr" class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-primary" required>
+                                        </div>
+                                        
+                                        <div>
+                                            <label for="waitlist_email" class="block text-gray-700 font-medium mb-2">אימייל</label>
+                                            <input type="email" id="waitlist_email" name="email" dir="ltr" class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-primary">
+                                        </div>
                                     </div>
-                                </div>
-                                
-                                <div>
-                                    <label for="waitlist_phone" class="block text-gray-700 text-sm font-medium mb-1">טלפון נייד *</label>
-                                    <input type="tel" id="waitlist_phone" name="phone" dir="ltr" class="w-full px-3 py-2 border border-gray-300 rounded-lg" required>
-                                </div>
-                                
-                                <div>
-                                    <label for="waitlist_email" class="block text-gray-700 text-sm font-medium mb-1">אימייל</label>
-                                    <input type="email" id="waitlist_email" name="email" dir="ltr" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                                </div>
-                                
-                                <div>
-                                    <label for="waitlist_preferred_date" class="block text-gray-700 text-sm font-medium mb-1">תאריך מועדף</label>
-                                    <input type="date" id="waitlist_preferred_date" name="preferred_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                                </div>
-                                
-                                <div class="grid grid-cols-2 gap-4">
+                                    
+                                    <!-- זמנים מועדפים -->
                                     <div>
-                                        <label for="waitlist_preferred_time_start" class="block text-gray-700 text-sm font-medium mb-1">משעה</label>
-                                        <input type="time" id="waitlist_preferred_time_start" name="preferred_time_start" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                        <label for="waitlist_preferred_date" class="block text-gray-700 font-medium mb-2">תאריך מועדף</label>
+                                        <input type="date" id="waitlist_preferred_date" name="preferred_date" class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-primary">
                                     </div>
+                                    
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label for="waitlist_preferred_time_start" class="block text-gray-700 font-medium mb-2">משעה</label>
+                                            <input type="time" id="waitlist_preferred_time_start" name="preferred_time_start" class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-primary">
+                                        </div>
+                                        <div>
+                                            <label for="waitlist_preferred_time_end" class="block text-gray-700 font-medium mb-2">עד שעה</label>
+                                            <input type="time" id="waitlist_preferred_time_end" name="preferred_time_end" class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-primary">
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- הערות -->
                                     <div>
-                                        <label for="waitlist_preferred_time_end" class="block text-gray-700 text-sm font-medium mb-1">עד שעה</label>
-                                        <input type="time" id="waitlist_preferred_time_end" name="preferred_time_end" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                        <label for="waitlist_notes" class="block text-gray-700 font-medium mb-2">הערות נוספות</label>
+                                        <textarea id="waitlist_notes" name="notes" rows="3" class="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:border-primary"></textarea>
                                     </div>
-                                </div>
-                                
-                                <div>
-                                    <label for="waitlist_notes" class="block text-gray-700 text-sm font-medium mb-1">הערות נוספות</label>
-                                    <textarea id="waitlist_notes" name="notes" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea>
-                                </div>
-                                
-                                <div class="flex justify-end space-x-4 space-x-reverse">
-                                    <button type="button" id="closeWaitlistModal" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100">ביטול</button>
-                                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark">הירשם לרשימת המתנה</button>
-                                </div>
-                            </form>
+                                    
+                                    <div class="flex justify-end mt-6 space-x-4 space-x-reverse">
+                                        <button type="button" id="closeWaitlistBtn" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100">ביטול</button>
+                                        <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark">הצטרף לרשימת המתנה</button>
+                                    </div>
+                                </form>
+                            </div>
                         </div>
                     </div>
                 </section>

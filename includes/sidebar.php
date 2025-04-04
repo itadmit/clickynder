@@ -63,6 +63,13 @@ $business_slug = $_SESSION['slug'] ?? "";
                     <span class="mr-3">צוות</span>
                 </a>
             </li>
+
+            <li>
+                <a href="waitlist.php" class="flex items-center px-4 py-3 <?php echo ($current_page == 'waitlist') ? 'text-primary bg-pastel-purple bg-opacity-30' : 'text-gray-600 hover:bg-gray-100'; ?> rounded-lg mx-2">
+                    <i class="fas fa-clipboard-list w-5 text-center"></i>
+                    <span class="mr-3">רשימות המתנה</span>
+                </a>
+            </li>
             
             <!-- תפריט שירותים עם אקורדיון -->
             <li class="mb-1">

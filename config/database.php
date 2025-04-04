@@ -3,7 +3,7 @@
 
 class Database {
     private $host = "localhost";
-    private $db_name = "klickinder";
+    private $db_name = "clickynder";
     private $username = "root";
     private $password = "root";
     private $conn;

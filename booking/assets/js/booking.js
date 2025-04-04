@@ -44,6 +44,49 @@ $(document).ready(function() {
     
     // מגדיר אירועים לטופס רשימת המתנה
     setupWaitlistHandlers();
+    
+    // עדכון פרטי השירות כאשר שירות נבחר
+    const updateServiceDetails = function() {
+        if (selectedServiceId) {
+            // מצא את השירות שנבחר
+            const serviceElement = $(`.service-card[onclick*="${selectedServiceId}"]`);
+            if (serviceElement.length) {
+                const serviceName = serviceElement.find('h4').text();
+                const serviceDuration = serviceElement.find('.text-sm').text().trim();
+                
+                // עדכן את פרטי השירות בפאנל השמאלי
+                $('#service-details-name').text(serviceName);
+                $('#service-details-duration span').text(serviceDuration);
+            }
+        }
+    };
+    
+    // עדכן את פרטי השירות כאשר בוחרים שירות
+    const originalSelectService = window.selectService;
+    if (typeof originalSelectService === 'function') {
+        window.selectService = function(serviceId, serviceName) {
+            // קרא לפונקציה המקורית אם היא קיימת
+            originalSelectService(serviceId, serviceName);
+            
+            // עדכן את פרטי השירות
+            setTimeout(updateServiceDetails, 100);
+        };
+    }
+    
+    // טיפול במיקום אלמנטים ב-responsive
+    const handleResponsiveLayout = function() {
+        // התאמת גובה במסכים קטנים
+        if (window.innerWidth < 768) {
+            $('.booking-info').appendTo('#step1');
+            $('.booking-info').hide();
+        } else {
+            $('.booking-info').appendTo('.booking-columns').show();
+        }
+    };
+    
+    // קרא לפונקציה פעם אחת ואז בכל שינוי גודל מסך
+    handleResponsiveLayout();
+    $(window).resize(handleResponsiveLayout);
 });
 
 /**
@@ -69,65 +112,231 @@ function selectService(serviceId, serviceName) {
  * אתחול לוח השנה
  */
 function initializeCalendar() {
-    const calendarEl = document.getElementById('calendarContainer');
+    // יצירת מיכל ללוח השנה בסגנון Calendly
+    const calendarContainer = document.getElementById('calendarContainer');
+    calendarContainer.innerHTML = '';
+    calendarContainer.classList.add('calendly-style');
     
-    calendar = new FullCalendar.Calendar(calendarEl, {
-        locale: 'he',
-        initialView: 'dayGridMonth',
-        height: 'auto',
-        selectable: true,
-        headerToolbar: {
-            left: 'prev,next today',
-            center: 'title',
-            right: ''
-        },
-        buttonText: {
-            today: 'היום'
-        },
-        direction: 'rtl',
-        firstDay: 0, // יום ראשון כיום ראשון בשבוע
-        select: function(info) {
-            handleDateSelection(info.startStr);
-        },
-        dateClick: function(info) {
-            handleDateSelection(info.dateStr);
-        },
-        eventSources: [
-            // טעינת ימי סגירה וחריגים מה-API
-            {
-                url: '../api/get_business_exceptions.php',
-                method: 'GET',
-                extraParams: {
-                    tenant_id: getTenantId()
-                },
-                failure: function() {
-                    console.error('שגיאה בטעינת ימי סגירה');
+    // יצירת אזור כותרת החודש וניווט
+    const calendarHeader = document.createElement('div');
+    calendarHeader.className = 'calendar-header';
+    
+    // הגדרת החודש הנוכחי ושנה
+    const currentDate = new Date();
+    let currentMonth = currentDate.getMonth();
+    let currentYear = currentDate.getFullYear();
+    
+    // יצירת כותרת החודש
+    const monthTitle = document.createElement('div');
+    monthTitle.className = 'month-title';
+    updateMonthTitle();
+    
+    // יצירת כפתורי ניווט בין חודשים
+    const monthNavigation = document.createElement('div');
+    monthNavigation.className = 'month-navigation';
+    
+    const prevButton = document.createElement('button');
+    prevButton.innerHTML = '<i class="fas fa-chevron-right"></i>';
+    prevButton.addEventListener('click', previousMonth);
+    
+    const nextButton = document.createElement('button');
+    nextButton.innerHTML = '<i class="fas fa-chevron-left"></i>';
+    nextButton.addEventListener('click', nextMonth);
+    
+    const todayButton = document.createElement('button');
+    todayButton.className = 'today-button';
+    todayButton.innerText = 'היום';
+    todayButton.addEventListener('click', goToToday);
+    
+    monthNavigation.appendChild(prevButton);
+    monthNavigation.appendChild(todayButton);
+    monthNavigation.appendChild(nextButton);
+    
+    calendarHeader.appendChild(monthTitle);
+    calendarHeader.appendChild(monthNavigation);
+    calendarContainer.appendChild(calendarHeader);
+    
+    // יצירת טבלת לוח השנה
+    const calendarGrid = document.createElement('table');
+    calendarGrid.className = 'calendar-grid';
+    
+    // יצירת כותרות ימי השבוע
+    const daysOfWeek = ['יום א\'', 'יום ב\'', 'יום ג\'', 'יום ד\'', 'יום ה\'', 'יום ו\'', 'שבת'];
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    
+    daysOfWeek.forEach(day => {
+        const th = document.createElement('th');
+        th.textContent = day;
+        headerRow.appendChild(th);
+    });
+    
+    thead.appendChild(headerRow);
+    calendarGrid.appendChild(thead);
+    
+    // יצירת גוף הטבלה
+    const tbody = document.createElement('tbody');
+    calendarGrid.appendChild(tbody);
+    
+    calendarContainer.appendChild(calendarGrid);
+    
+    // יצירת אזור הצגת סלוטים זמינים
+    const timeSlotsContainer = document.createElement('div');
+    timeSlotsContainer.className = 'time-slots-container';
+    timeSlotsContainer.style.display = 'none';
+    
+    const timeSlotsTitle = document.createElement('div');
+    timeSlotsTitle.className = 'time-slots-title';
+    timeSlotsContainer.appendChild(timeSlotsTitle);
+    
+    const timeSlotsGrid = document.createElement('div');
+    timeSlotsGrid.className = 'time-slots-grid';
+    timeSlotsGrid.id = 'timeSlotsGrid';
+    timeSlotsContainer.appendChild(timeSlotsGrid);
+    
+    calendarContainer.appendChild(timeSlotsContainer);
+    
+    // עדכון החודש הנוכחי בלוח
+    updateCalendar();
+    
+    // פונקציות עזר
+    
+    // עדכון כותרת החודש
+    function updateMonthTitle() {
+        const months = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+        monthTitle.textContent = months[currentMonth] + ' ' + currentYear;
+    }
+    
+    // מעבר לחודש הקודם
+    function previousMonth() {
+        currentMonth--;
+        if (currentMonth < 0) {
+            currentMonth = 11;
+            currentYear--;
+        }
+        updateMonthTitle();
+        updateCalendar();
+    }
+    
+    // מעבר לחודש הבא
+    function nextMonth() {
+        currentMonth++;
+        if (currentMonth > 11) {
+            currentMonth = 0;
+            currentYear++;
+        }
+        updateMonthTitle();
+        updateCalendar();
+    }
+    
+    // מעבר לחודש הנוכחי
+    function goToToday() {
+        const today = new Date();
+        currentMonth = today.getMonth();
+        currentYear = today.getFullYear();
+        updateMonthTitle();
+        updateCalendar();
+    }
+    
+    // עדכון תצוגת הלוח
+    function updateCalendar() {
+        // ניקוי הגוף הקיים
+        tbody.innerHTML = '';
+        
+        // קבלת מספר הימים בחודש והיום הראשון בשבוע
+        const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        
+        // היום הנוכחי
+        const today = new Date();
+        const currentDay = today.getDate();
+        const currentMonthYear = today.getMonth() === currentMonth && today.getFullYear() === currentYear;
+        
+        // יצירת השורות והתאים
+        let date = 1;
+        for (let i = 0; i < 6; i++) {
+            // יצירת שורה חדשה
+            const row = document.createElement('tr');
+            
+            // יצירת תאים בשורה
+            for (let j = 0; j < 7; j++) {
+                const cell = document.createElement('td');
+                
+                if (i === 0 && j < firstDay) {
+                    // תאים ריקים לפני תחילת החודש
+                    row.appendChild(cell);
+                } else if (date > daysInMonth) {
+                    // יציאה אם הגענו לסוף החודש
+                    break;
+                } else {
+                    // יצירת הקוביה ליום
+                    const dayElement = document.createElement('div');
+                    dayElement.className = 'calendar-day';
+                    dayElement.textContent = date;
+                    const specificDay = date; // שמירת הערך הנוכחי של date
+                    // בדיקה האם זה היום הנוכחי
+                    if (currentMonthYear && date === currentDay) {
+                        dayElement.classList.add('day-today');
+                    }
+                    
+                    // בדיקה האם היום בעבר (לא ניתן לבחירה)
+                    const currentDate = new Date(currentYear, currentMonth, date);
+                    const isInPast = currentDate < today && !(currentMonthYear && date === currentDay);
+                    
+                    if (isInPast) {
+                        dayElement.classList.add('day-disabled');
+                    } else {
+                        // אירוע לחיצה על יום
+                        dayElement.addEventListener('click', function() {
+                            // מסירים בחירה קודמת
+                            const selectedDays = document.querySelectorAll('.day-selected');
+                            selectedDays.forEach(day => day.classList.remove('day-selected'));
+                            
+                            // מסמנים את היום הנוכחי
+                            this.classList.add('day-selected');
+                            
+                            // מחרוזת תאריך בפורמט YYYY-MM-DD
+                            const selectedMonth = (currentMonth + 1).toString().padStart(2, '0');
+                            const selectedDay = specificDay.toString().padStart(2, '0'); // שימוש בערך השמור
+                            const dateStr = `${currentYear}-${selectedMonth}-${selectedDay}`;
+                            
+                            // שמירת התאריך שנבחר
+                            selectedDate = dateStr;
+                            
+                            // עדכון כותרת הסלוטים
+                            const dayNames = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+                            const selectedDayOfWeek = new Date(dateStr).getDay();
+                            
+                            timeSlotsTitle.textContent = `זמינות ליום ${dayNames[selectedDayOfWeek]}, ${selectedDay}/${selectedMonth}/${currentYear}`;
+                            
+                            // טעינת הסלוטים הזמינים
+                            fetchAvailableTimeSlots(selectedServiceId, dateStr, selectedStaffId);
+                            
+                            // הצגת אזור הסלוטים
+                            timeSlotsContainer.style.display = 'block';
+                        });
+                    }
+                    
+                    cell.appendChild(dayElement);
+                    row.appendChild(cell);
+                    date++;
                 }
             }
-        ],
-        
-        // הגבלת בחירת תאריכים - רק מהיום והלאה
-        validRange: {
-            start: new Date()
-        },
-        
-        // שינוי תצוגה לימים סגורים
-        dayCellClassNames: function(arg) {
-            const dayOfWeek = arg.date.getDay();
             
-            // סגירת ימי שבת - דוגמה כללית
-            if (dayOfWeek === 6) {
-                return ['fc-day-disabled'];
+            tbody.appendChild(row);
+            
+            // אם סיימנו את כל הימים בחודש
+            if (date > daysInMonth) {
+                break;
             }
-            
-            return [];
         }
-    });
+    }
 }
 
 /**
  * טיפול בבחירת תאריך בלוח השנה
  */
+// בקובץ המקורי - בפונקציה handleDateSelection או בפונקציה שמטפלת בלחיצה על תאריך
 function handleDateSelection(dateStr) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -148,7 +357,7 @@ function handleDateSelection(dateStr) {
         return;
     }
     
-    selectedDate = dateStr;
+    selectedDate = dateStr;  // <-- כאן התאריך נקבע
     $('#selectedDate').text(formatDateHebrew(selectedDate));
     
     // ניקוי בחירה קודמת
@@ -180,11 +389,11 @@ function formatDateHebrew(dateStr) {
  */
 function fetchAvailableTimeSlots(serviceId, dateStr, staffId) {
     $('#timeSlots').removeClass('hidden');
-    const container = $('#timeSlotsContainer');
-    container.empty();
+    const timeSlotsGrid = $('#timeSlotsGrid');
+    timeSlotsGrid.empty();
     
     // הצגת אנימציית טעינה
-    container.html('<div class="col-span-full text-center py-4"><i class="fas fa-spinner fa-spin mr-2"></i> טוען זמנים פנויים...</div>');
+    timeSlotsGrid.html('<div class="col-span-full text-center py-4"><i class="fas fa-spinner fa-spin mr-2"></i> טוען זמנים פנויים...</div>');
     
     // מציאת tenant_id
     const tenantId = getTenantId();
@@ -196,16 +405,15 @@ function fetchAvailableTimeSlots(serviceId, dateStr, staffId) {
         staff_id: staffId || 0,
         tenant_id: tenantId
     }, function(response) {
-        container.empty();
+        timeSlotsGrid.empty();
         
         if (response.success && response.slots.length > 0) {
             // הצגת הסלוטים הפנויים
             availableTimeSlots = response.slots;
             
             response.slots.forEach(slot => {
-                container.append(`
-                    <div class="time-slot bg-white border-2 border-gray-300 rounded-lg py-2 text-center cursor-pointer hover:border-primary"
-                         onclick="selectTimeSlot('${slot}')">${slot}</div>
+                timeSlotsGrid.append(`
+                    <div class="time-slot" onclick="selectTimeSlot('${slot}')">${slot}</div>
                 `);
             });
             
@@ -223,9 +431,35 @@ function fetchAvailableTimeSlots(serviceId, dateStr, staffId) {
             // כפתור המשך לא פעיל
             $('#nextToStep3').addClass('bg-gray-300 text-gray-500 cursor-not-allowed')
                              .removeClass('bg-primary hover:bg-primary-dark text-white');
+            
+            // הצג את כפתור רשימת ההמתנה
+            if ($('#joinWaitlistBtn').length === 0) {
+                timeSlotsGrid.append(`
+                    <div class="text-center col-span-full py-4">
+                        <p class="text-gray-600 mb-4">אין זמנים פנויים בתאריך שנבחר.</p>
+                        <button id="joinWaitlistBtn" class="bg-secondary hover:bg-secondary-dark text-white font-bold py-2 px-6 rounded-xl transition duration-300">
+                            הירשם לרשימת המתנה
+                        </button>
+                    </div>
+                `);
+                
+                // הוספת אירוע לחיצה על כפתור רשימת המתנה
+                $('#joinWaitlistBtn').click(function() {
+                    $('#waitlist_service_id').val(selectedServiceId);
+                    $('#waitlist_staff_id').val(selectedStaffId);
+                    
+                    // אם יש תאריך נבחר, ממלאים אותו
+                    if (selectedDate) {
+                        $('#waitlist_preferred_date').val(selectedDate);
+                    }
+                    
+                    // חלונית עולה
+                    $('#waitlistModal').removeClass('hidden').addClass('show');
+                });
+            }
         }
     }).fail(function() {
-        container.html('<div class="col-span-full text-center py-4 text-red-500"><i class="fas fa-exclamation-circle mr-2"></i> אירעה שגיאה בטעינת הזמנים הפנויים</div>');
+        timeSlotsGrid.html('<div class="col-span-full text-center py-4 text-red-500"><i class="fas fa-exclamation-circle mr-2"></i> אירעה שגיאה בטעינת הזמנים הפנויים</div>');
         
         // כפתור המשך לא פעיל
         $('#nextToStep3').addClass('bg-gray-300 text-gray-500 cursor-not-allowed')
@@ -240,8 +474,8 @@ function selectTimeSlot(timeSlot) {
     selectedTimeSlot = timeSlot;
     
     // עדכון ממשק
-    $('.time-slot').removeClass('selected bg-primary text-white');
-    $(`.time-slot:contains("${timeSlot}")`).addClass('selected bg-primary text-white');
+    $('.time-slot').removeClass('selected');
+    $(`.time-slot:contains("${timeSlot}")`).addClass('selected');
     
     // הפעלת כפתור המשך
     $('#nextToStep3').removeClass('bg-gray-300 text-gray-500 cursor-not-allowed')
@@ -251,6 +485,10 @@ function selectTimeSlot(timeSlot) {
 /**
  * הגדרת מעבר בין שלבים
  */
+/**
+ * הגדרת מעבר בין שלבים - גרסה מתוקנת 
+ * להחליף את הפונקציה הקיימת במלואה
+ */
 function setupStepNavigation() {
     // שלב 1 לשלב 2
     $('#nextToStep2').click(function() {
@@ -259,13 +497,8 @@ function setupStepNavigation() {
             return;
         }
         
-        // אתחול הלוח אם לא קיים
-        if (!calendar) {
-            initializeCalendar();
-        }
-        
-        // הצגת הלוח
-        calendar.render();
+        // אתחול הלוח - הפונקציה החדשה מבצעת אתחול ולא דורשת קריאה ל-render
+        initializeCalendar();
         
         // מעבר לשלב 2
         $('.booking-step').removeClass('active');
@@ -405,7 +638,23 @@ function setupStepNavigation() {
         // איסוף תשובות לשאלות מקדימות
         const intakeAnswers = {};
         $('.intake-answer').each(function() {
-            // ... הקוד הקיים ...
+            const questionId = $(this).data('question-id');
+            if (questionId) {
+                if ($(this).attr('type') === 'checkbox') {
+                    if ($(this).is(':checked')) {
+                        if (!intakeAnswers[questionId]) {
+                            intakeAnswers[questionId] = [];
+                        }
+                        intakeAnswers[questionId].push($(this).val());
+                    }
+                } else if ($(this).attr('type') === 'radio') {
+                    if ($(this).is(':checked')) {
+                        intakeAnswers[questionId] = $(this).val();
+                    }
+                } else {
+                    intakeAnswers[questionId] = $(this).val();
+                }
+            }
         });
         
         // וידוא שיש לנו staff_id - חשוב!
@@ -482,13 +731,12 @@ function setupStepNavigation() {
         });
     });
 }
-
 /**
- * הגדרת אירועים לטופס רשימת המתנה
+ * מגדיר אירועים לטופס רשימת המתנה
  */
 function setupWaitlistHandlers() {
     // פתיחת חלונית רשימת המתנה
-    $('#joinWaitlistBtn').click(function() {
+    $(document).on('click', '#joinWaitlistBtn', function() {
         $('#waitlist_service_id').val(selectedServiceId);
         $('#waitlist_staff_id').val(selectedStaffId);
         
@@ -497,16 +745,43 @@ function setupWaitlistHandlers() {
             $('#waitlist_preferred_date').val(selectedDate);
         }
         
+        // העתקת פרטי הלקוח מהטופס הראשי אם כבר מולאו
+        if ($('#first_name').val()) {
+            $('#waitlist_first_name').val($('#first_name').val());
+        }
+        if ($('#last_name').val()) {
+            $('#waitlist_last_name').val($('#last_name').val());
+        }
+        if ($('#phone').val()) {
+            $('#waitlist_phone').val($('#phone').val());
+        }
+        if ($('#email').val()) {
+            $('#waitlist_email').val($('#email').val());
+        }
+        
         // חלונית עולה
         $('#waitlistModal').removeClass('hidden').addClass('show');
+        $('body').css('overflow', 'hidden'); // מונע גלילה
     });
     
     // סגירת חלונית רשימת המתנה
-    $('#closeWaitlistModal').click(function() {
+    $('#closeWaitlistModal, #closeWaitlistBtn').click(function() {
         $('#waitlistModal').removeClass('show');
         setTimeout(function() {
             $('#waitlistModal').addClass('hidden');
+            $('body').css('overflow', 'auto'); // מחזיר גלילה
         }, 300);
+    });
+    
+    // סגירת המודל בלחיצה על הרקע
+    $('#waitlistModal').click(function(e) {
+        if (e.target === this) {
+            $(this).removeClass('show');
+            setTimeout(function() {
+                $('#waitlistModal').addClass('hidden');
+                $('body').css('overflow', 'auto');
+            }, 300);
+        }
     });
     
     // שליחת טופס רשימת המתנה
@@ -518,23 +793,49 @@ function setupWaitlistHandlers() {
         const originalText = submitBtn.text();
         submitBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin mr-2"></i> מעבד...');
         
+        // המרת הטופס לאובייקט JSON
+        const formData = {};
+        $(this).serializeArray().forEach(item => {
+            formData[item.name] = item.value;
+        });
+        
         // שליחת הנתונים
         $.ajax({
             url: '../api/add_to_waitlist.php',
             type: 'POST',
-            data: $(this).serialize(),
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
             success: function(response) {
                 if (response.success) {
                     // הצגת הודעת הצלחה
-                    alert('נרשמת בהצלחה לרשימת ההמתנה! נעדכן אותך כשיתפנה תור.');
+                    $('#waitlistModal').removeClass('show').addClass('hidden');
+                    $('body').css('overflow', 'auto');
                     
-                    // סגירת החלונית
-                    $('#waitlistModal').removeClass('show');
+                    // יצירת הודעת הצלחה
+                    const successMessage = `
+                        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg mb-6 mt-4 fade-in">
+                            <div class="flex">
+                                <div class="py-1"><svg class="fill-current h-6 w-6 text-green-500 mr-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M2.93 17.07A10 10 0 1 1 17.07 2.93 10 10 0 0 1 2.93 17.07zm12.73-1.41A8 8 0 1 0 4.34 4.34a8 8 0 0 0 11.32 11.32zM9 11V9h2v6H9v-4zm0-6h2v2H9V5z"/></svg></div>
+                                <div>
+                                    <p class="font-bold">נרשמת בהצלחה לרשימת ההמתנה!</p>
+                                    <p class="text-sm">נעדכן אותך כשיתפנה תור.</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // הוספת ההודעה לדף
+                    $('#noTimeSlotsMessage').after(successMessage);
+                    
+                    // איפוס הטופס
+                    $('#waitlistForm')[0].reset();
+                    
+                    // הסתרת ההודעה אחרי 5 שניות
                     setTimeout(function() {
-                        $('#waitlistModal').addClass('hidden');
-                        // איפוס הטופס
-                        $('#waitlistForm')[0].reset();
-                    }, 300);
+                        $('.fade-in').fadeOut('slow', function() {
+                            $(this).remove();
+                        });
+                    }, 5000);
                 } else {
                     // הצגת שגיאה
                     alert('אירעה שגיאה: ' + (response.message || 'אנא נסה שנית'));
@@ -612,6 +913,71 @@ function generateCalendarLink(title, start, end, location, address) {
  * קבלת ה-tenant_id מה-URL
  */
 function getTenantId() {
-    // מציאת tenant_id מתוך מטא-תג או שדה נסתר (יש לשכתב לפי המבנה הספציפי שלך)
+    // מציאת tenant_id מתוך מטא-תג או שדה נסתר
     return $('meta[name="tenant-id"]').attr('content') || $('input[name="tenant_id"]').val() || 1;
 }
+
+/**
+ * תמיכה באימות צד לקוח ב-waitlistForm
+ */
+$(document).ready(function() {
+    $('#waitlistForm').on('submit', function(e) {
+        const firstName = $('#waitlist_first_name').val();
+        const lastName = $('#waitlist_last_name').val();
+        const phone = $('#waitlist_phone').val();
+        
+        // בדיקה שהשדות החשובים מלאים
+        if (!firstName || !lastName || !phone) {
+            e.preventDefault();
+            alert('אנא מלא את כל שדות החובה');
+            return false;
+        }
+        
+        // בדיקת תקינות טלפון בסיסית
+        const phonePattern = /^0[2-9]\d{7,8}$/;
+        if (!phonePattern.test(phone.replace(/[- ]/g, ''))) {
+            e.preventDefault();
+            alert('מספר הטלפון אינו תקין');
+            return false;
+        }
+        
+        // בדיקת תקינות אימייל אופציונלי
+        const email = $('#waitlist_email').val();
+        if (email) {
+            const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailPattern.test(email)) {
+                e.preventDefault();
+                alert('כתובת האימייל אינה תקינה');
+                return false;
+            }
+        }
+        
+        return true;
+    });
+});
+
+// הוספת CSS עבור אנימציית הופעה
+$("<style>")
+    .prop("type", "text/css")
+    .html(`
+        .fade-in {
+            animation: fadeIn 0.5s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        #waitlistModal {
+            transition: opacity 0.3s ease;
+        }
+        
+        #waitlistModal.show {
+            opacity: 1;
+        }
+        
+        #waitlistModal:not(.show) {
+            opacity: 0;
+        }
+    `)
+    .appendTo("head");
