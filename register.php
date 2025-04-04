@@ -24,13 +24,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // קבלת נתונים מהטופס
     $business_name = sanitizeInput($_POST['business_name']);
     $slug = sanitizeInput($_POST['slug']);
-    $email = sanitizeInput($_POST['email']);
-    $phone = sanitizeInput($_POST['phone']);
+    $owner_name = sanitizeInput($_POST["owner_name"]);
+    $email = sanitizeInput($_POST["email"]);
+    $phone = sanitizeInput($_POST["phone"]);
+    $address = sanitizeInput($_POST["address"]);
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
     
     // וידוא שכל השדות החובה מולאו
-    if (empty($business_name) || empty($slug) || empty($email) || empty($phone) || empty($password) || empty($confirm_password)) {
+    if (empty($business_name) || empty($slug) || empty($owner_name) || empty($email) || empty($phone) || empty($address) || empty($password) || empty($confirm_password)) {
         $error_message = "כל שדות החובה חייבים להיות מלאים";
     } 
     // בדיקת תקינות אימייל
@@ -73,11 +75,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $hashed_password = password_hash($password, PASSWORD_DEFAULT);
                     
                     // הכנסת המשתמש החדש למסד הנתונים
-                    $query = "INSERT INTO tenants (business_name, slug, email, password, phone) 
-                              VALUES (:business_name, :slug, :email, :password, :phone)";
+                    $query = "INSERT INTO tenants (business_name, slug, owner_name, email, password, phone) 
+                              VALUES (:business_name, :slug, :owner_name, :email, :password, :phone)";
                     $stmt = $db->prepare($query);
                     $stmt->bindParam(":business_name", $business_name);
                     $stmt->bindParam(":slug", $slug);
+                    $stmt->bindParam(":owner_name", $owner_name);
                     $stmt->bindParam(":email", $email);
                     $stmt->bindParam(":password", $hashed_password);
                     $stmt->bindParam(":phone", $phone);
@@ -85,6 +88,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     if ($stmt->execute()) {
                         // קבלת ה-ID של המשתמש שנוצר
                         $tenant_id = $db->lastInsertId();
+                        
+                        // יצירת סניף ראשי
+                        $query = "INSERT INTO branches (tenant_id, name, phone, address, is_main, is_active) 
+                                  VALUES (:tenant_id, :name, :phone, :address, 1, 1)";
+                        $stmt = $db->prepare($query);
+                        $stmt->bindParam(":tenant_id", $tenant_id);
+                        $stmt->bindParam(":name", $business_name);
+                        $stmt->bindParam(":phone", $phone);
+                        $stmt->bindParam(":address", $address);
+                        $stmt->execute();
                         
                         // הוספת המשתמש למסלול הבסיסי
                         $query = "INSERT INTO tenant_subscriptions (tenant_id, subscription_id) 
@@ -321,6 +334,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <input type="tel" id="phone" name="phone" 
                                class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-primary"
                                placeholder="050-1234567" dir="ltr" value="<?php echo isset($_POST['phone']) ? htmlspecialchars($_POST['phone']) : ''; ?>" required>
+                    </div>
+                    
+                    <div>
+                        <label for="address" class="block text-gray-700 font-medium mb-2">כתובת העסק</label>
+                        <input type="text" id="address" name="address" 
+                               class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-primary"
+                               placeholder="כתובת העסק שלך" value="<?php echo isset($_POST['address']) ? htmlspecialchars($_POST['address']) : ''; ?>" required>
                     </div>
                     
                     <div>
